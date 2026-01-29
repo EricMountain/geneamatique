@@ -76,7 +76,21 @@ def get_children(conn, individual_id):
     return cursor.fetchall()
 
 
-def format_person(sosa_number, old_id, name, dob, dod, marriage, show_number=True):
+def get_spouses(conn, individual_id):
+    """Get spouses of an individual based on shared children."""
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT i.id, i.old_id, i.name, i.date_of_birth, i.date_of_death, i.marriage_date
+        FROM relationships r
+        JOIN relationships r2 ON r.child_id = r2.child_id
+        JOIN individuals i ON r2.parent_id = i.id
+        WHERE r.parent_id = ? AND r2.parent_id != r.parent_id
+        ORDER BY i.old_id
+    """, (individual_id,))
+    return cursor.fetchall()
+
+
+def format_person(sosa_number, old_id, name, dob, dod, marriage, show_number=True, marriage_partner_names=None):
     """Format person information for display with colors.
 
     Colors:
@@ -98,8 +112,13 @@ def format_person(sosa_number, old_id, name, dob, dod, marriage, show_number=Tru
         dates.append(colorize(f"°{dob}", Colors.GREEN))
     if dod:
         dates.append(colorize(f"+{dod}", Colors.GRAY))
-    if marriage:
-        dates.append(colorize(f"X{marriage}", Colors.MAGENTA))
+    if marriage or marriage_partner_names:
+        marriage_text = "X"
+        if marriage:
+            marriage_text += f"{marriage}"
+        if marriage_partner_names:
+            marriage_text += f" {marriage_partner_names}"
+        dates.append(colorize(marriage_text, Colors.MAGENTA))
     if dates:
         info += f" {', '.join(dates)}"
     return info
@@ -209,7 +228,10 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
 
     # Print current person with generation number
     connector = "└── " if is_last else "├── "
-    print(f"{prefix}{connector}{format_person(generation_number, old_id, name, dob, dod, marriage, show_number=False)}")
+    spouses = get_spouses(conn, individual_id)
+    spouse_names = ", ".join([spouse[2] for spouse in spouses]) if spouses else None
+
+    print(f"{prefix}{connector}{format_person(generation_number, old_id, name, dob, dod, marriage, show_number=False, marriage_partner_names=spouse_names)}")
 
     # Get children
     children = get_children(conn, individual_id)
