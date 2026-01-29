@@ -1,0 +1,21 @@
+# Local data and databases
+/data
+*.db
+*.sqlite
+*.sqlite3
+*.odt
+*.zip
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
