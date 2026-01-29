@@ -57,7 +57,7 @@ def create_database(db_name='data/genealogy.db'):
 def get_cell_text(cell):
     """Extract all text from a table cell, recursively getting text from all child nodes including spans."""
     from odf import text as odf_text
-    
+
     def get_text_recursive(element):
         """Recursively extract all text from an element and its children."""
         text_content = []
@@ -69,7 +69,7 @@ def get_cell_text(cell):
                 # Element with children (like text:span) - recurse into it
                 text_content.append(get_text_recursive(node))
         return ''.join(text_content)
-    
+
     paragraphs = cell.getElementsByType(P)
     text_parts = []
     for p in paragraphs:
@@ -92,7 +92,7 @@ def parse_individual_data(cell_text):
     + 15 Oct 2007 in City B
     PR Technician
     X 28 Jul 1973 in City C
-    
+
     Single-line format:
     5. PERSON_B Sample Name° 18 Feb 1917 in City D+ 2 Jul 2015PR Tailor
     """
@@ -240,7 +240,7 @@ def infer_relationships(individuals_dict):
 
 def store_data(individuals, db_name='data/genealogy.db'):
     """Store parsed individuals and inferred relationships in the database.
-    
+
     Merges individuals by old_id, preferring longer/more complete names and
     accumulating data from all sources.
     """
@@ -253,19 +253,20 @@ def store_data(individuals, db_name='data/genealogy.db'):
         try:
             # Check if this old_id already exists
             cursor.execute('SELECT id, name, date_of_birth, date_of_death, profession, marriage_date FROM individuals WHERE old_id = ?',
-                          (individual['old_id'],))
+                           (individual['old_id'],))
             existing = cursor.fetchone()
-            
+
             if existing:
                 # Person exists - merge data
                 db_id = existing[0]
                 existing_name = existing[1]
-                
+
                 # Prefer the longer/more complete name
                 new_name = individual['name']
                 if len(new_name) > len(existing_name):
-                    cursor.execute('UPDATE individuals SET name = ? WHERE id = ?', (new_name, db_id))
-                
+                    cursor.execute(
+                        'UPDATE individuals SET name = ? WHERE id = ?', (new_name, db_id))
+
                 # Update fields with non-null/non-empty values if current value is null or empty
                 if individual['date_of_birth']:
                     cursor.execute('UPDATE individuals SET date_of_birth = ? WHERE id = ? AND (date_of_birth IS NULL OR date_of_birth = "")',
@@ -294,15 +295,15 @@ def store_data(individuals, db_name='data/genealogy.db'):
                     individual['marriage_date']
                 ))
                 db_id = cursor.lastrowid
-            
+
             # Record the source file
             cursor.execute('''
             INSERT OR IGNORE INTO individual_sources (individual_id, source_file)
             VALUES (?, ?)
             ''', (db_id, individual['source_file']))
-            
+
             individuals_dict[db_id] = individual
-            
+
         except Exception as e:
             print(f"Error inserting individual {individual.get('name')}: {e}")
 

@@ -9,6 +9,8 @@ import argparse
 from typing import List, Tuple, Optional
 
 # ANSI color codes
+
+
 class Colors:
     CYAN = '\033[96m'      # For men
     YELLOW = '\033[93m'    # For women
@@ -17,6 +19,7 @@ class Colors:
     MAGENTA = '\033[95m'   # For marriage dates
     RESET = '\033[0m'      # Reset to default
     BOLD = '\033[1m'       # Bold text
+
 
 def colorize(text, color):
     """Wrap text in ANSI color codes."""
@@ -75,7 +78,7 @@ def get_children(conn, individual_id):
 
 def format_person(sosa_number, old_id, name, dob, dod, marriage):
     """Format person information for display with colors.
-    
+
     Colors:
     - Cyan for men (even old_id)
     - Yellow for women (odd old_id)
@@ -85,7 +88,7 @@ def format_person(sosa_number, old_id, name, dob, dod, marriage):
     """
     # Determine gender color based on old_id (even=father/male, odd=mother/female)
     gender_color = Colors.CYAN if old_id % 2 == 0 else Colors.YELLOW
-    
+
     info = f"{sosa_number:4d} {colorize(name, gender_color)}"
     dates = []
     if dob:
@@ -95,14 +98,14 @@ def format_person(sosa_number, old_id, name, dob, dod, marriage):
     if marriage:
         dates.append(colorize(f"X{marriage}", Colors.MAGENTA))
     if dates:
-        info += f" ({', '.join(dates)})"
+        info += f" {', '.join(dates)}"
     return info
 
 
 def draw_ancestor_tree(conn, individual_id, prefix="", is_last=True, visited=None, sosa_number=1):
     """
     Draw an ASCII tree of ancestors working backwards from the individual.
-    
+
     Uses Sosa-Stradonitz numbering where:
     - The root person is 1
     - For any person N, their father is 2N and mother is 2N+1
@@ -148,14 +151,14 @@ def draw_ancestor_tree(conn, individual_id, prefix="", is_last=True, visited=Non
         # Father is 2N, Mother is 2N+1
         father = None
         mother = None
-        
+
         for parent in parents:
             parent_id, parent_old_id, parent_name, parent_dob, parent_dod, parent_marriage, rel_type = parent
             if rel_type == 'father':
                 father = parent
             else:
                 mother = parent
-        
+
         # Draw in order: mother first (odd number), then father (even number)
         # This keeps the visual order consistent
         parents_to_draw = []
@@ -163,11 +166,11 @@ def draw_ancestor_tree(conn, individual_id, prefix="", is_last=True, visited=Non
             parents_to_draw.append((mother, sosa_number * 2 + 1))
         if father:
             parents_to_draw.append((father, sosa_number * 2))
-        
+
         for idx, (parent, parent_sosa) in enumerate(parents_to_draw):
             parent_id = parent[0]
             is_last_parent = (idx == len(parents_to_draw) - 1)
-            
+
             draw_ancestor_tree(conn, parent_id, new_prefix,
                                is_last_parent, visited, parent_sosa)
 
@@ -175,7 +178,7 @@ def draw_ancestor_tree(conn, individual_id, prefix="", is_last=True, visited=Non
 def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=None, depth=0, max_depth=10, generation_number=1):
     """
     Draw an ASCII tree of descendants working forward from the individual.
-    
+
     For descendants, we use a simple sequential numbering within each generation.
 
     Uses box-drawing characters to create a tree structure.
@@ -216,14 +219,14 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
         for idx, child in enumerate(children):
             child_id, child_old_id, child_name, child_dob, child_dod = child
             is_last_child = (idx == len(children) - 1)
-            
+
             # For descendants, we use generation.child_index numbering
             # e.g., 1 -> 1.1, 1.2, 1.3 (but displayed as simple integers)
             # For simplicity, use sequential numbering based on depth
             child_number = generation_number * 10 + idx + 1
-            
-            draw_descendant_tree(conn, child_id, new_prefix, is_last_child, 
-                               visited, depth + 1, max_depth, child_number)
+
+            draw_descendant_tree(conn, child_id, new_prefix, is_last_child,
+                                 visited, depth + 1, max_depth, child_number)
 
 
 def main():
