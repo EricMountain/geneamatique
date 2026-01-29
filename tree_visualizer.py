@@ -217,7 +217,7 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
 
         # Draw each child
         for idx, child in enumerate(children):
-            child_id, child_old_id, child_name, child_dob, child_dod = child
+            child_id, child_old_id, child_name, child_dob, child_dod, child_marriage = child
             is_last_child = (idx == len(children) - 1)
 
             # For descendants, we use generation.child_index numbering
