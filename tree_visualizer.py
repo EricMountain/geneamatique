@@ -90,7 +90,7 @@ def get_spouses(conn, individual_id):
     return cursor.fetchall()
 
 
-def format_person(sosa_number, old_id, name, dob, dod, marriage, show_number=True, marriage_partner_names=None):
+def format_person(old_id, name, dob, dod, marriage, marriage_partner_names=None):
     """Format person information for display with colors.
 
     Colors:
@@ -103,10 +103,7 @@ def format_person(sosa_number, old_id, name, dob, dod, marriage, show_number=Tru
     # Determine gender color based on old_id (even=father/male, odd=mother/female)
     gender_color = Colors.CYAN if old_id % 2 == 0 else Colors.YELLOW
 
-    if show_number:
-        info = f"{sosa_number:4d} {colorize(name, gender_color)}"
-    else:
-        info = f"{colorize(name, gender_color)}"
+    info = f"{colorize(name, gender_color)}"
     dates = []
     if dob:
         dates.append(colorize(f"°{dob}", Colors.GREEN))
@@ -124,7 +121,7 @@ def format_person(sosa_number, old_id, name, dob, dod, marriage, show_number=Tru
     return info
 
 
-def draw_ancestor_tree(conn, individual_id, prefix="", is_last=True, visited=None, sosa_number=1):
+def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visited=None, sosa_number=1, depth=0):
     """
     Draw an ASCII tree of ancestors working backwards from the individual.
 
@@ -139,6 +136,8 @@ def draw_ancestor_tree(conn, individual_id, prefix="", is_last=True, visited=Non
     """
     if visited is None:
         visited = set()
+    if active_bars is None:
+        active_bars = set()
 
     # Prevent infinite loops
     if individual_id in visited:
@@ -159,16 +158,36 @@ def draw_ancestor_tree(conn, individual_id, prefix="", is_last=True, visited=Non
     db_id, old_id, name, dob, dod, marriage = result
 
     # Print current person with Sosa number
-    connector = "└── " if is_last else "├── "
-    print(f"{prefix}{connector}{format_person(sosa_number, old_id, name, dob, dod, marriage)}")
+    # Connector aligns under parent's rightmost sosa digit
+    # Formula: connector_col = 3 + 6*(depth-1) for depth >= 1
+    if depth == 0:
+        # Root: sosa number right-aligned in 4 chars + space + name
+        print(f"{sosa_number:>4} {format_person(old_id, name, dob, dod, marriage)}")
+    else:
+        connector_col = 3 + 6 * (depth - 1)
+        connector = "└──" if is_last else "├──"
+        
+        # Build prefix with vertical bars at active positions
+        prefix = ""
+        for i in range(connector_col):
+            if i in active_bars:
+                prefix += "│"
+            else:
+                prefix += " "
+        
+        # Sosa right-aligned in 4 chars after connector (3 chars)
+        print(f"{prefix}{connector}{sosa_number:>4} {format_person(old_id, name, dob, dod, marriage)}")
+        
+        # Update active bars for children
+        if is_last:
+            active_bars.discard(connector_col)
+        else:
+            active_bars.add(connector_col)
 
     # Get parents
     parents = get_parents(conn, individual_id)
 
     if parents:
-        # Prepare new prefix for children
-        new_prefix = prefix + ("    " if is_last else "│   ")
-
         # Draw each parent with Sosa-Stradonitz numbering
         # Father is 2N, Mother is 2N+1
         father = None
@@ -193,8 +212,8 @@ def draw_ancestor_tree(conn, individual_id, prefix="", is_last=True, visited=Non
             parent_id = parent[0]
             is_last_parent = (idx == len(parents_to_draw) - 1)
 
-            draw_ancestor_tree(conn, parent_id, new_prefix,
-                               is_last_parent, visited, parent_sosa)
+            draw_ancestor_tree(conn, parent_id, active_bars.copy(),
+                               is_last_parent, visited, parent_sosa, depth + 1)
 
 
 def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=None, depth=0, max_depth=10, generation_number=1):
@@ -227,18 +246,24 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
     db_id, old_id, name, dob, dod, marriage = result
 
     # Print current person with generation number
-    connector = "└── " if is_last else "├── "
+    if depth == 0:
+        connector = ""
+    else:
+        connector = "└── " if is_last else "├── "
     spouses = get_spouses(conn, individual_id)
     spouse_names = ", ".join([spouse[2] for spouse in spouses]) if spouses else None
 
-    print(f"{prefix}{connector}{format_person(generation_number, old_id, name, dob, dod, marriage, show_number=False, marriage_partner_names=spouse_names)}")
+    print(f"{prefix}{connector}{format_person(old_id, name, dob, dod, marriage, marriage_partner_names=spouse_names)}")
 
     # Get children
     children = get_children(conn, individual_id)
 
     if children:
         # Prepare new prefix for children
-        new_prefix = prefix + ("    " if is_last else "│   ")
+        if depth == 0:
+            new_prefix = prefix
+        else:
+            new_prefix = prefix + ("    " if is_last else "│   ")
 
         # Draw each child
         for idx, child in enumerate(children):
@@ -314,7 +339,7 @@ Examples:
             print(f"\n{'='*80}")
             print(f"ANCESTOR TREE FOR: {name} (ID {old_id})")
             print(f"{'='*80}\n")
-            draw_ancestor_tree(conn, db_id, "", True)
+            draw_ancestor_tree(conn, db_id, None, True)
 
         print()  # Add blank line at end
 

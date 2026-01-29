@@ -1,5 +1,6 @@
 # Local data and databases
 /data
+/tmp
 *.db
 *.sqlite
 *.sqlite3
