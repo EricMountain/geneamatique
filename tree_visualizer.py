@@ -76,7 +76,7 @@ def get_children(conn, individual_id):
     return cursor.fetchall()
 
 
-def format_person(sosa_number, old_id, name, dob, dod, marriage):
+def format_person(sosa_number, old_id, name, dob, dod, marriage, show_number=True):
     """Format person information for display with colors.
 
     Colors:
@@ -89,7 +89,10 @@ def format_person(sosa_number, old_id, name, dob, dod, marriage):
     # Determine gender color based on old_id (even=father/male, odd=mother/female)
     gender_color = Colors.CYAN if old_id % 2 == 0 else Colors.YELLOW
 
-    info = f"{sosa_number:4d} {colorize(name, gender_color)}"
+    if show_number:
+        info = f"{sosa_number:4d} {colorize(name, gender_color)}"
+    else:
+        info = f"{colorize(name, gender_color)}"
     dates = []
     if dob:
         dates.append(colorize(f"°{dob}", Colors.GREEN))
@@ -206,7 +209,7 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
 
     # Print current person with generation number
     connector = "└── " if is_last else "├── "
-    print(f"{prefix}{connector}{format_person(generation_number, old_id, name, dob, dod, marriage)}")
+    print(f"{prefix}{connector}{format_person(generation_number, old_id, name, dob, dod, marriage, show_number=False)}")
 
     # Get children
     children = get_children(conn, individual_id)
