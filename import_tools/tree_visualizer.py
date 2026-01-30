@@ -231,51 +231,36 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
     dates = []
 
     # Birth information
-    if dob or birth_loc or birth_comment:
+    if dob:
         birth_text = "°"
-        if dob:
-            birth_text += colorize(dob, Colors.GREEN)
-            if birth_loc:
-                birth_text += colorize(f" à {birth_loc}", Colors.GREEN)
+        birth_text += colorize(dob, Colors.GREEN)
+        if birth_loc:
+            birth_text += colorize(f" à {birth_loc}", Colors.GREEN)
         if birth_comment:
             birth_text += colorize(f" {{{birth_comment}}}", Colors.GREEN_DARK)
-        if not dob and (birth_loc or birth_comment):
-            # No date, just comment/location
-            comment_text = birth_loc if birth_loc else birth_comment
-            birth_text += colorize(f"{comment_text}", Colors.GREEN_DARK)
         dates.append(birth_text)
 
     # Death information
-    if dod or death_loc or death_comment:
+    if dod:
         death_text = "+"
-        if dod:
-            death_text += colorize(dod, Colors.GRAY_BRIGHT)
-            if death_loc:
-                death_text += colorize(f" à {death_loc}", Colors.GRAY_BRIGHT)
+        death_text += colorize(dod, Colors.GRAY_BRIGHT)
+        if death_loc:
+            death_text += colorize(f" à {death_loc}", Colors.GRAY_BRIGHT)
         if death_comment:
             death_text += colorize(f" {{{death_comment}}}", Colors.GRAY)
-        if not dod and (death_loc or death_comment):
-            # No date, just comment/location
-            comment_text = death_loc if death_loc else death_comment
-            death_text += colorize(f"{comment_text}", Colors.GRAY)
         dates.append(death_text)
 
     # Marriage information
-    if marriage or marriage_loc or marriage_comment or marriage_partner_names:
+    if marriage:
         marriage_text = "X"
-        if marriage:
-            marriage_text += colorize(marriage, Colors.MAGENTA)
-            if marriage_loc:
-                marriage_text += colorize(f" à {marriage_loc}", Colors.MAGENTA)
+        marriage_text += colorize(marriage, Colors.MAGENTA)
+        if marriage_loc:
+            marriage_text += colorize(f" à {marriage_loc}", Colors.MAGENTA)
         if marriage_comment:
             marriage_text += colorize(f" {{{marriage_comment}}}",
                                       Colors.MAGENTA_DARK)
         if marriage_partner_names:
             marriage_text += f" {marriage_partner_names}"
-        if not marriage and (marriage_loc or marriage_comment) and not marriage_partner_names:
-            # No date, just comment/location
-            comment_text = marriage_loc if marriage_loc else marriage_comment
-            marriage_text += colorize(f"{comment_text}", Colors.MAGENTA_DARK)
         dates.append(marriage_text)
 
     if dates:
