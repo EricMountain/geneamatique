@@ -146,10 +146,10 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
                  'germinal', 'floréal', 'prairial', 'messidor', 'thermidor', 'fructidor']
 
     # Try to match a date at the beginning
-    # Gregorian date patterns: "4 Jan 1952", "04/01/1952", "1952-01-04", "04.01.1952", "4 Jan1952"
+    # Gregorian date patterns: "4 Jan 1952", "04/01/1952", "1952-01-04", "04.01.1952", "4 Jan1952", "1er juillet 1788"
     gregorian_patterns = [
-        r'^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})',
-        r'^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)(\d{4})',
+        r'^(1er|\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})',
+        r'^(1er|\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)(\d{4})',
         r'^(\d{1,2})/(\d{1,2})/(\d{4})',
         r'^(\d{1,2})\.(\d{1,2})\.(\d{4})',
         r'^(\d{4})-(\d{1,2})-(\d{1,2})'
@@ -330,10 +330,11 @@ def parse_date_to_iso(date_str):
     month_map_fr = {'janvier': 1, 'février': 2, 'mars': 3, 'avril': 4, 'mai': 5, 'juin': 6,
                     'juillet': 7, 'août': 8, 'septembre': 9, 'octobre': 10, 'novembre': 11, 'décembre': 12}
 
-    # Try "4 Jan 1952" format
-    match = re.match(r'^(\d{1,2})\s+(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
+    # Try "4 Jan 1952" format or "1er juillet 1788"
+    match = re.match(r'^(1er|\d{1,2})\s+(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
     if match:
-        day = int(match.group(1))
+        day_str = match.group(1)
+        day = 1 if day_str == '1er' else int(day_str)
         month_str = match.group(2).lower()[:3]
         year = int(match.group(3))
         month = month_map_en.get(month_str) or month_map_fr.get(
@@ -341,10 +342,11 @@ def parse_date_to_iso(date_str):
         if month:
             return f"{year:04d}-{month:02d}-{day:02d}"
 
-    # Try "4 Jan1952" format (no space before year)
-    match = re.match(r'^(\d{1,2})\s+(\w+)(\d{4})$', date_str, re.IGNORECASE)
+    # Try "4 Jan1952" format (no space before year) or "1er juillet1788"
+    match = re.match(r'^(1er|\d{1,2})\s+(\w+)(\d{4})$', date_str, re.IGNORECASE)
     if match:
-        day = int(match.group(1))
+        day_str = match.group(1)
+        day = 1 if day_str == '1er' else int(day_str)
         month_str = match.group(2).lower()[:3]
         year = int(match.group(3))
         month = month_map_en.get(month_str) or month_map_fr.get(
