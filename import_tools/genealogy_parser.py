@@ -146,10 +146,12 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
                  'germinal', 'floréal', 'prairial', 'messidor', 'thermidor', 'fructidor']
 
     # Try to match a date at the beginning
-    # Gregorian date patterns: "4 Jan 1952", "04/01/1952", "1952-01-04"
+    # Gregorian date patterns: "4 Jan 1952", "04/01/1952", "1952-01-04", "04.01.1952", "4 Jan1952"
     gregorian_patterns = [
         r'^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})',
+        r'^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)(\d{4})',
         r'^(\d{1,2})/(\d{1,2})/(\d{4})',
+        r'^(\d{1,2})\.(\d{1,2})\.(\d{4})',
         r'^(\d{4})-(\d{1,2})-(\d{1,2})'
     ]
 
@@ -266,26 +268,54 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
         # No date found - entire text becomes comment
         return {'date': None, 'location': None, 'comment': text}
 
-    # Extract location (look for "à" or "au" after date)
-    # Use a more careful pattern that doesn't consume the parenthesis
-    location_match = re.match(
-        r'^(?:à|au)\s+([^(]+?)(?=\s*\(|$)', remaining_text, re.IGNORECASE)
-    if location_match:
-        location = location_match.group(1).strip()
-        remaining_text = remaining_text[location_match.end():].strip()
-
-    # Extract comment in parentheses
-    comment_match = re.search(r'\(([^)]+)\)', remaining_text)
-    if comment_match:
-        comment = comment_match.group(1).strip()
-    else:
-        # If no parentheses, check if remaining text is just a Sosa ID + name reference
-        # These should not be stored as comments (e.g., "6 MOUNTAIN William")
-        if remaining_text and not date_iso:
-            # Pattern: number followed by name (spouse reference in marriage field)
-            if not re.match(r'^\d+\s+[A-Z]', remaining_text):
-                # Not a Sosa reference, treat as comment
-                comment = remaining_text
+    # Extract location and comment
+    if remaining_text:
+        # First, try the traditional "à"/"au" pattern
+        location_match = re.match(
+            r'^(?:à|au)\s+(.+)', remaining_text, re.IGNORECASE)
+        if location_match:
+            potential_location = location_match.group(1).strip()
+            # Check if there's a comment in parentheses at the end
+            paren_match = re.search(r'\s*\(([^)]+)\)$', potential_location)
+            if paren_match:
+                # Check if the content in parentheses is a department number (just digits)
+                paren_content = paren_match.group(1).strip()
+                if paren_content.isdigit():
+                    # Department number - keep it as part of location
+                    location = potential_location
+                else:
+                    # Comment - split it
+                    location = potential_location[:paren_match.start()].strip()
+                    comment = paren_content
+            else:
+                location = potential_location
+        else:
+            # No "à"/"au" - assume remaining text is location unless it's entirely in parentheses
+            if remaining_text.startswith('(') and remaining_text.endswith(')'):
+                paren_content = remaining_text[1:-1].strip()
+                if paren_content.isdigit():
+                    # Department number in parentheses - treat as location
+                    location = remaining_text
+                else:
+                    # Comment in parentheses
+                    comment = paren_content
+            else:
+                # Check for comment in parentheses
+                paren_match = re.search(r'\s*\(([^)]+)\)', remaining_text)
+                if paren_match:
+                    # Check if the parentheses contain only a department number
+                    paren_content = paren_match.group(1).strip()
+                    if paren_content.isdigit() and paren_match.start() > 0:
+                        # There's text before the parentheses, and parentheses contain department number
+                        # Keep it all as location
+                        location = remaining_text
+                    else:
+                        # Split: text before parentheses is location, content is comment
+                        location = remaining_text[:paren_match.start()].strip()
+                        comment = paren_content
+                else:
+                    # No parentheses - entire remaining text is location
+                    location = remaining_text
 
     return {'date': date_iso, 'location': location, 'comment': comment}
 
@@ -311,8 +341,27 @@ def parse_date_to_iso(date_str):
         if month:
             return f"{year:04d}-{month:02d}-{day:02d}"
 
+    # Try "4 Jan1952" format (no space before year)
+    match = re.match(r'^(\d{1,2})\s+(\w+)(\d{4})$', date_str, re.IGNORECASE)
+    if match:
+        day = int(match.group(1))
+        month_str = match.group(2).lower()[:3]
+        year = int(match.group(3))
+        month = month_map_en.get(month_str) or month_map_fr.get(
+            match.group(2).lower())
+        if month:
+            return f"{year:04d}-{month:02d}-{day:02d}"
+
     # Try "04/01/1952" format (DD/MM/YYYY)
     match = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})$', date_str)
+    if match:
+        day = int(match.group(1))
+        month = int(match.group(2))
+        year = int(match.group(3))
+        return f"{year:04d}-{month:02d}-{day:02d}"
+
+    # Try "04.01.1952" format (DD.MM.YYYY)
+    match = re.match(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$', date_str)
     if match:
         day = int(match.group(1))
         month = int(match.group(2))
