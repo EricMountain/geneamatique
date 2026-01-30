@@ -82,7 +82,7 @@ pip install -r requirements.txt
 Set the ODT source folder via environment variable (recommended for anonymization):
 
 ```bash
-export GENEALOGY_DATA_DIR="data/odt"
+export GENEALOGY_DATA_DIR="data/sources"
 ```
 
 The parser and tests will read from this directory when present.
@@ -92,7 +92,7 @@ The parser and tests will read from this directory when present.
 Run the parser on all ODT files in the genealogy directory:
 
 ```bash
-python run_parser.py
+python import_tools/run_parser.py
 ```
 
 This will:

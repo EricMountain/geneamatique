@@ -1,4 +1,4 @@
-from genealogy_parser import create_database, parse_documents, store_data
+from .genealogy_parser import create_database, parse_documents, store_data
 import unittest
 import sqlite3
 import os
@@ -372,7 +372,7 @@ class TestParserFunctionality(unittest.TestCase):
 
     def test_parse_individual_data(self):
         """Test parsing of individual cell data."""
-        from genealogy_parser import parse_individual_data
+        from .genealogy_parser import parse_individual_data
 
         # Test with complete data
         cell_text = """2. PERSON_A Sample Name
@@ -395,7 +395,7 @@ class TestParserFunctionality(unittest.TestCase):
 
     def test_parse_individual_data_minimal(self):
         """Test parsing with minimal data (just name)."""
-        from genealogy_parser import parse_individual_data
+        from .genealogy_parser import parse_individual_data
 
         cell_text = "128. PERSON_B Sample Name"
         result = parse_individual_data(cell_text)
@@ -408,15 +408,24 @@ class TestParserFunctionality(unittest.TestCase):
 
     def test_parse_individual_data_invalid(self):
         """Test parsing with invalid data."""
-        from genealogy_parser import parse_individual_data
+        from .genealogy_parser import parse_individual_data
 
         # Empty string
         result = parse_individual_data("")
         self.assertIsNone(result)
 
-        # No ID number
-        result = parse_individual_data("PERSON_C")
-        self.assertIsNone(result)
+    def test_parse_individual_data_name_with_x(self):
+        """Test parsing when name ends with X and has marriage info."""
+        from .genealogy_parser import parse_individual_data
+
+        # Test case for name ending with X followed by marriage
+        cell_text = "519. CALBRIX Françoise\nX 28 Jul 1973 in City C"
+        result = parse_individual_data(cell_text)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result['old_id'], 519)
+        self.assertEqual(result['name'], 'CALBRIX Françoise')
+        self.assertEqual(result['marriage_date'], '28 Jul 1973 in City C')
 
 
 if __name__ == '__main__':

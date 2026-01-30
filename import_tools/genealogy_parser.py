@@ -102,11 +102,13 @@ def parse_individual_data(cell_text):
     # First, normalize the text by inserting newlines before special markers if they're on the same line
     # This handles cases where all data is concatenated without proper line breaks
     text = cell_text.strip()
-    # Insert newlines before °, +, PR, X markers (but not at the start of string)
+    # Insert newlines before °, +, PR markers when they appear mid-line
     text = re.sub(r'([^\n])°', r'\1\n°', text)
     text = re.sub(r'([^\n])\+', r'\1\n+', text)
     text = re.sub(r'([^\n])PR', r'\1\nPR', text)
-    text = re.sub(r'([^\n])X\s', r'\1\nX ', text)
+    # Note: X marker is NOT normalized here because it always starts on a new line in source data
+    # This prevents incorrectly splitting names that end with X (like "CALBRIX") or contain "X" 
+    # as a middle initial/part (like "DUPONT X")
 
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     if not lines:

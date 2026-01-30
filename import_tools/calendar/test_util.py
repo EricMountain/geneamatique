@@ -40,6 +40,14 @@ class TestCalendarConversions(unittest.TestCase):
         self.assertEqual(gregorian_to_republican(1793, 1, 1), (1, 4, 12))
         self.assertEqual(republican_to_gregorian(1, 4, 12), (1793, 1, 1))
 
+    def test_random_date_conversion(self):
+        """Test conversion of a random date."""
+        # May 15, 1794 -> Republican year 2, month 9, day 25
+        self.assertEqual(gregorian_to_republican(1794, 5, 15), (2, 8, 26))
+        self.assertEqual(republican_to_gregorian(2, 8, 26), (1794, 5, 15))
+        self.assertEqual(gregorian_to_republican(1799, 12, 31), (8, 4, 10))
+        self.assertEqual(republican_to_gregorian(8, 4, 10), (1799, 12, 31))
+
     def test_round_trip(self):
         """Test round-trip conversion for various dates."""
         test_dates = [
@@ -50,9 +58,12 @@ class TestCalendarConversions(unittest.TestCase):
             (1800, 1, 1),
         ]
         for g_year, g_month, g_day in test_dates:
-            r_year, r_month, r_day = gregorian_to_republican(g_year, g_month, g_day)
-            back_g_year, back_g_month, back_g_day = republican_to_gregorian(r_year, r_month, r_day)
-            self.assertEqual((back_g_year, back_g_month, back_g_day), (g_year, g_month, g_day))
+            r_year, r_month, r_day = gregorian_to_republican(
+                g_year, g_month, g_day)
+            back_g_year, back_g_month, back_g_day = republican_to_gregorian(
+                r_year, r_month, r_day)
+            self.assertEqual((back_g_year, back_g_month,
+                             back_g_day), (g_year, g_month, g_day))
 
     def test_invalid_gregorian_date_before_start(self):
         """Test error for dates before the Republican calendar start."""
