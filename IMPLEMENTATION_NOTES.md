@@ -19,9 +19,22 @@ This implementation adds comprehensive date parsing, French Revolutionary calend
 - **Format**: Supports "8 thermidor an II" or "8 thermidor II"
 - **Dual Date Validation**: When both Gregorian and Revolutionary dates are present (e.g., "26 Jul 1794 (8 thermidor an II)"), the system:
   - Checks consistency between both dates
-  - Issues a warning if dates don't match
+  - Issues a warning if dates don't match (with full context)
   - Stores only the Gregorian date
   - Drops the Revolutionary date after validation
+- **Enhanced Warning System**:
+  - Warnings include: source file name, person name, and original date strings
+  - Warnings are issued synchronously during parsing
+  - Warnings are accumulated and displayed as a summary at the end of the run
+  - Warning format example:
+    ```
+    Date inconsistency in birth:
+      File: 17bis Quentin Victoria.odt
+      Person: VARANNE Pierre François
+      Gregorian date: '20 janvier 1803' (ISO: 1803-01-20)
+      Revolutionary date: '30 ventôse an 11' (ISO: 1803-03-21)
+      Using Gregorian date.
+    ```
 
 ### 3. Location Extraction
 - **Pattern Recognition**: Searches for "à" or "au" after dates

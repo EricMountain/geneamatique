@@ -13,6 +13,9 @@ try:
 except ImportError:
     from calendar.util import republican_to_gregorian
 
+# Global accumulator for date inconsistency warnings
+_date_warnings = []
+
 
 def create_database(db_name='data/genealogy.db'):
     """Create the SQLite database with proper schema."""
@@ -96,28 +99,34 @@ def get_cell_text(cell):
     return '\n'.join(text_parts)
 
 
-def parse_event_details(text_after_marker, event_type='birth'):
+def parse_event_details(text_after_marker, event_type='birth', source_file=None, person_name=None):
     """Parse event details (date, location, comment) from text after a marker.
-    
+
     Args:
         text_after_marker: Text after ° (birth), + (death), or X (marriage) marker
         event_type: Type of event for better error messages
-    
+        source_file: Source ODT filename for warning messages
+        person_name: Name of the person for warning messages
+
     Returns:
         dict with 'date', 'location', 'comment' keys (all ISO8601 format for dates)
     """
     if not text_after_marker:
         return {'date': None, 'location': None, 'comment': None}
-    
+
     text = text_after_marker.strip()
     date_iso = None
     location = None
     comment = None
-    
+
+    # Track original date strings for warning messages
+    original_gregorian = None
+    original_revolutionary = None
+
     # French Revolutionary calendar month names
     fr_months = ['vendémiaire', 'brumaire', 'frimaire', 'nivôse', 'pluviôse', 'ventôse',
                  'germinal', 'floréal', 'prairial', 'messidor', 'thermidor', 'fructidor']
-    
+
     # Try to match a date at the beginning
     # Gregorian date patterns: "4 Jan 1952", "04/01/1952", "1952-01-04"
     gregorian_patterns = [
@@ -125,18 +134,22 @@ def parse_event_details(text_after_marker, event_type='birth'):
         r'^(\d{1,2})/(\d{1,2})/(\d{4})',
         r'^(\d{4})-(\d{1,2})-(\d{1,2})'
     ]
-    
+
     # Try to match French Revolutionary date at the beginning (not in parentheses)
-    fr_pattern = r'^(\d{1,2})\s+(' + '|'.join(fr_months) + r')\s+(?:an\s+)?(\w+)'
+    fr_pattern = r'^(\d{1,2})\s+(' + '|'.join(fr_months) + \
+        r')\s+(?:an\s+)?(\w+)'
     fr_match = re.match(fr_pattern, text, re.IGNORECASE)
-    
+
     gregorian_date = None
+    revolutionary_date_first = None
     remaining_text = text
-    
+
     if fr_match:
         # Found French Revolutionary date at start
+        revolutionary_date_first = fr_match.group(0)
         try:
-            date_iso = parse_french_revolutionary_date(fr_match.group(0))
+            date_iso = parse_french_revolutionary_date(
+                revolutionary_date_first)
             remaining_text = text[fr_match.end():].strip()
         except Exception as e:
             # If FR date parsing fails, treat as comment
@@ -147,6 +160,7 @@ def parse_event_details(text_after_marker, event_type='birth'):
             match = re.match(pattern, text, re.IGNORECASE)
             if match:
                 gregorian_date = match.group(0)
+                original_gregorian = gregorian_date  # Store original for warning
                 remaining_text = text[match.end():].strip()
                 # Convert to ISO8601
                 try:
@@ -156,70 +170,121 @@ def parse_event_details(text_after_marker, event_type='birth'):
                     comment = text
                     return {'date': None, 'location': None, 'comment': comment}
                 break
-    
+
     # Check for French Revolutionary date in parentheses (for dual date format)
     fr_date_match = re.search(r'\(([^)]+)\)', remaining_text)
     if fr_date_match:
         potential_fr_date = fr_date_match.group(1).strip()
         # Check if it looks like a French Revolutionary date
-        is_fr_date = any(month in potential_fr_date.lower() for month in fr_months)
-        
+        is_fr_date = any(month in potential_fr_date.lower()
+                         for month in fr_months)
+
         if is_fr_date:
             try:
-                fr_date_iso = parse_french_revolutionary_date(potential_fr_date)
-                if gregorian_date and date_iso:
-                    # Both dates present - check consistency
-                    if fr_date_iso != date_iso:
-                        warnings.warn(f"Date inconsistency in {event_type}: Gregorian={date_iso}, Revolutionary={fr_date_iso}. Using Gregorian.")
-                elif not date_iso:
-                    # Only Revolutionary date present (in parentheses)
+                original_revolutionary = potential_fr_date  # Store original for warning
+                fr_date_iso = parse_french_revolutionary_date(
+                    potential_fr_date)
+
+                # Check if we already have a date from the start
+                if date_iso:
+                    # We have a date already - check what type it was
+                    if gregorian_date:
+                        # Gregorian + Revolutionary in parens - check consistency
+                        if fr_date_iso != date_iso:
+                            warning_msg = (
+                                f"Date inconsistency in {event_type}:\n"
+                                f"  File: {source_file or 'unknown'}\n"
+                                f"  Person: {person_name or 'unknown'}\n"
+                                f"  Gregorian date: '{original_gregorian}' (ISO: {date_iso})\n"
+                                f"  Revolutionary date: '{original_revolutionary}' (ISO: {fr_date_iso})\n"
+                                f"  Using Gregorian date."
+                            )
+                            warnings.warn(warning_msg)
+                            # Accumulate warning for end-of-run summary
+                            _date_warnings.append({
+                                'event_type': event_type,
+                                'file': source_file,
+                                'person': person_name,
+                                'gregorian_original': original_gregorian,
+                                'gregorian_iso': date_iso,
+                                'revolutionary_original': original_revolutionary,
+                                'revolutionary_iso': fr_date_iso
+                            })
+                    elif revolutionary_date_first:
+                        # Revolutionary + Revolutionary in parens - check consistency
+                        if fr_date_iso != date_iso:
+                            warning_msg = (
+                                f"Date inconsistency in {event_type}:\n"
+                                f"  File: {source_file or 'unknown'}\n"
+                                f"  Person: {person_name or 'unknown'}\n"
+                                f"  First Revolutionary date: '{revolutionary_date_first}' (ISO: {date_iso})\n"
+                                f"  Second Revolutionary date: '{original_revolutionary}' (ISO: {fr_date_iso})\n"
+                                f"  Using first date."
+                            )
+                            warnings.warn(warning_msg)
+                            # Accumulate warning for end-of-run summary
+                            _date_warnings.append({
+                                'event_type': event_type,
+                                'file': source_file,
+                                'person': person_name,
+                                'gregorian_original': revolutionary_date_first,
+                                'gregorian_iso': date_iso,
+                                'revolutionary_original': original_revolutionary,
+                                'revolutionary_iso': fr_date_iso
+                            })
+                else:
+                    # Only Revolutionary date in parentheses, no date at start
                     date_iso = fr_date_iso
+
                 # Remove the French Revolutionary date from remaining text
-                remaining_text = remaining_text[:fr_date_match.start()] + remaining_text[fr_date_match.end():]
+                remaining_text = remaining_text[:fr_date_match.start(
+                )] + remaining_text[fr_date_match.end():]
                 remaining_text = remaining_text.strip()
             except Exception as e:
                 # If FR date parsing fails, just ignore it
                 pass
-    
+
     if not date_iso:
         # No date found - entire text becomes comment
         return {'date': None, 'location': None, 'comment': text}
-    
+
     # Extract location (look for "à" or "au" after date)
     # Use a more careful pattern that doesn't consume the parenthesis
-    location_match = re.match(r'^(?:à|au)\s+([^(]+?)(?=\s*\(|$)', remaining_text, re.IGNORECASE)
+    location_match = re.match(
+        r'^(?:à|au)\s+([^(]+?)(?=\s*\(|$)', remaining_text, re.IGNORECASE)
     if location_match:
         location = location_match.group(1).strip()
         remaining_text = remaining_text[location_match.end():].strip()
-    
+
     # Extract comment in parentheses
     comment_match = re.search(r'\(([^)]+)\)', remaining_text)
     if comment_match:
         comment = comment_match.group(1).strip()
-    
+
     return {'date': date_iso, 'location': location, 'comment': comment}
 
 
 def parse_date_to_iso(date_str):
     """Convert various date formats to ISO8601 (YYYY-MM-DD)."""
     date_str = date_str.strip()
-    
+
     # Map month names to numbers
     month_map_en = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
                     'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
     month_map_fr = {'janvier': 1, 'février': 2, 'mars': 3, 'avril': 4, 'mai': 5, 'juin': 6,
                     'juillet': 7, 'août': 8, 'septembre': 9, 'octobre': 10, 'novembre': 11, 'décembre': 12}
-    
+
     # Try "4 Jan 1952" format
     match = re.match(r'^(\d{1,2})\s+(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
     if match:
         day = int(match.group(1))
         month_str = match.group(2).lower()[:3]
         year = int(match.group(3))
-        month = month_map_en.get(month_str) or month_map_fr.get(match.group(2).lower())
+        month = month_map_en.get(month_str) or month_map_fr.get(
+            match.group(2).lower())
         if month:
             return f"{year:04d}-{month:02d}-{day:02d}"
-    
+
     # Try "04/01/1952" format (DD/MM/YYYY)
     match = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})$', date_str)
     if match:
@@ -227,7 +292,7 @@ def parse_date_to_iso(date_str):
         month = int(match.group(2))
         year = int(match.group(3))
         return f"{year:04d}-{month:02d}-{day:02d}"
-    
+
     # Try "1952-01-04" format (already ISO8601)
     match = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})$', date_str)
     if match:
@@ -235,13 +300,13 @@ def parse_date_to_iso(date_str):
         month = int(match.group(2))
         day = int(match.group(3))
         return f"{year:04d}-{month:02d}-{day:02d}"
-    
+
     raise ValueError(f"Could not parse date: {date_str}")
 
 
 def parse_french_revolutionary_date(fr_date_str):
     """Parse French Revolutionary calendar date and convert to ISO8601.
-    
+
     Example: "8 thermidor an II" -> converts to Gregorian ISO8601
     """
     fr_months = {
@@ -250,16 +315,18 @@ def parse_french_revolutionary_date(fr_date_str):
         'germinal': 7, 'floréal': 8, 'prairial': 9,
         'messidor': 10, 'thermidor': 11, 'fructidor': 12
     }
-    
+
     # Pattern: "8 thermidor an II" or "8 thermidor II"
-    match = re.match(r'(\d{1,2})\s+(\w+)\s+(?:an\s+)?(\w+)', fr_date_str, re.IGNORECASE)
+    match = re.match(r'(\d{1,2})\s+(\w+)\s+(?:an\s+)?(\w+)',
+                     fr_date_str, re.IGNORECASE)
     if not match:
-        raise ValueError(f"Could not parse French Revolutionary date: {fr_date_str}")
-    
+        raise ValueError(
+            f"Could not parse French Revolutionary date: {fr_date_str}")
+
     day = int(match.group(1))
     month_name = match.group(2).lower()
     year_str = match.group(3)
-    
+
     # Convert Roman numerals to integers
     roman_map = {'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7,
                  'VIII': 8, 'IX': 9, 'X': 10, 'XI': 11, 'XII': 12, 'XIII': 13, 'XIV': 14}
@@ -269,17 +336,17 @@ def parse_french_revolutionary_date(fr_date_str):
             year = int(year_str)
         except:
             raise ValueError(f"Could not parse year: {year_str}")
-    
+
     month = fr_months.get(month_name)
     if not month:
         raise ValueError(f"Unknown French Revolutionary month: {month_name}")
-    
+
     # Convert to Gregorian
     greg_year, greg_month, greg_day = republican_to_gregorian(year, month, day)
     return f"{greg_year:04d}-{greg_month:02d}-{greg_day:02d}"
 
 
-def parse_individual_data(cell_text):
+def parse_individual_data(cell_text, source_file=None):
     """Parse individual data from cell text.
 
     Format examples (anonymized):
@@ -292,10 +359,14 @@ def parse_individual_data(cell_text):
 
     Single-line format:
     5. PERSON_B Sample Name° 18 Feb 1917 à City D+ 2 Jul 2015PR Tailor
-    
+
     With French Revolutionary calendar:
     6. PERSON_C
     ° 8 thermidor an II (26 Jul 1794)
+
+    Args:
+        cell_text: Text content from the table cell
+        source_file: Source ODT filename for warning messages
     """
     if not cell_text or not cell_text.strip():
         return None
@@ -335,13 +406,16 @@ def parse_individual_data(cell_text):
 
     for line in lines[1:]:
         if line.startswith('°'):
-            birth_details = parse_event_details(line[1:].strip(), 'birth')
+            birth_details = parse_event_details(
+                line[1:].strip(), 'birth', source_file, name)
         elif line.startswith('+'):
-            death_details = parse_event_details(line[1:].strip(), 'death')
+            death_details = parse_event_details(
+                line[1:].strip(), 'death', source_file, name)
         elif line.startswith('PR'):
             profession = line[2:].strip()
         elif line.startswith('X'):
-            marriage_details = parse_event_details(line[1:].strip(), 'marriage')
+            marriage_details = parse_event_details(
+                line[1:].strip(), 'marriage', source_file, name)
 
     return {
         'old_id': old_id,
@@ -362,6 +436,7 @@ def parse_individual_data(cell_text):
 def parse_document(filepath):
     """Parse a single ODT document and extract all individuals."""
     individuals = []
+    source_filename = os.path.basename(filepath)
 
     try:
         doc = load(filepath)
@@ -373,9 +448,10 @@ def parse_document(filepath):
                 cells = row.getElementsByType(TableCell)
                 for cell in cells:
                     cell_text = get_cell_text(cell)
-                    individual = parse_individual_data(cell_text)
+                    individual = parse_individual_data(
+                        cell_text, source_filename)
                     if individual:
-                        individual['source_file'] = os.path.basename(filepath)
+                        individual['source_file'] = source_filename
                         individuals.append(individual)
     except Exception as e:
         print(f"Error parsing {filepath}: {e}")
@@ -446,6 +522,17 @@ def infer_relationships(individuals_dict):
                 })
 
     return relationships
+
+
+def get_date_warnings():
+    """Get accumulated date inconsistency warnings."""
+    return _date_warnings.copy()
+
+
+def clear_date_warnings():
+    """Clear accumulated date inconsistency warnings."""
+    global _date_warnings
+    _date_warnings = []
 
 
 def store_data(individuals, db_name='data/genealogy.db'):
@@ -575,6 +662,7 @@ if __name__ == "__main__":
     create_database(db_name)
 
     print(f"\nParsing documents from {folder_path}...")
+    clear_date_warnings()  # Clear any previous warnings
     individuals = parse_documents(folder_path)
 
     print(f"\nTotal individuals found: {len(individuals)}")
@@ -585,3 +673,21 @@ if __name__ == "__main__":
     print(f"\nComplete!")
     print(f"  Stored {num_individuals} unique individuals")
     print(f"  Stored {num_relationships} relationships")
+
+    # Display accumulated date warnings
+    warnings_list = get_date_warnings()
+    if warnings_list:
+        print(f"\n{'='*80}")
+        print(
+            f"DATE INCONSISTENCY WARNINGS: {len(warnings_list)} issue(s) found")
+        print(f"{'='*80}")
+        for i, warning in enumerate(warnings_list, 1):
+            print(f"\n{i}. {warning['event_type'].upper()} date mismatch:")
+            print(f"   File: {warning['file']}")
+            print(f"   Person: {warning['person']}")
+            print(
+                f"   Gregorian: '{warning['gregorian_original']}' → {warning['gregorian_iso']}")
+            print(
+                f"   Revolutionary: '{warning['revolutionary_original']}' → {warning['revolutionary_iso']}")
+            print(f"   Resolution: Using Gregorian date")
+        print(f"\n{'='*80}")

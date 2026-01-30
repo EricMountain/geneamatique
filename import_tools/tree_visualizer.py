@@ -104,9 +104,9 @@ def get_spouses(conn, individual_id):
 
 
 def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
-                 dod=None, death_loc=None, death_comment=None,
-                 marriage=None, marriage_loc=None, marriage_comment=None,
-                 marriage_partner_names=None):
+                  dod=None, death_loc=None, death_comment=None,
+                  marriage=None, marriage_loc=None, marriage_comment=None,
+                  marriage_partner_names=None):
     """Format person information for display with colors.
 
     Colors:
@@ -115,7 +115,7 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
     - Green (bright) for birth dates, dark green for birth comments
     - Gray bright for death dates, dark gray for death comments
     - Magenta (bright) for marriage dates, dark magenta for marriage comments
-    
+
     Comments are displayed in braces.
     """
     # Determine gender color based on old_id (even=father/male, odd=mother/female)
@@ -123,7 +123,7 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
 
     info = f"{colorize(name, gender_color)}"
     dates = []
-    
+
     # Birth information
     if dob or birth_loc or birth_comment:
         birth_text = "°"
@@ -138,7 +138,7 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
             comment_text = birth_loc if birth_loc else birth_comment
             birth_text += colorize(f"{comment_text}", Colors.GREEN_DARK)
         dates.append(birth_text)
-    
+
     # Death information
     if dod or death_loc or death_comment:
         death_text = "+"
@@ -153,7 +153,7 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
             comment_text = death_loc if death_loc else death_comment
             death_text += colorize(f"{comment_text}", Colors.GRAY)
         dates.append(death_text)
-    
+
     # Marriage information
     if marriage or marriage_loc or marriage_comment or marriage_partner_names:
         marriage_text = "X"
@@ -162,7 +162,8 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
             if marriage_loc:
                 marriage_text += colorize(f" à {marriage_loc}", Colors.MAGENTA)
         if marriage_comment:
-            marriage_text += colorize(f" {{{marriage_comment}}}", Colors.MAGENTA_DARK)
+            marriage_text += colorize(f" {{{marriage_comment}}}",
+                                      Colors.MAGENTA_DARK)
         if marriage_partner_names:
             marriage_text += f" {marriage_partner_names}"
         if not marriage and (marriage_loc or marriage_comment) and not marriage_partner_names:
@@ -170,7 +171,7 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
             comment_text = marriage_loc if marriage_loc else marriage_comment
             marriage_text += colorize(f"{comment_text}", Colors.MAGENTA_DARK)
         dates.append(marriage_text)
-    
+
     if dates:
         info += f" {', '.join(dates)}"
     return info
@@ -223,7 +224,7 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
     else:
         connector_col = 3 + 6 * (depth - 1)
         connector = "└──" if is_last else "├──"
-        
+
         # Build prefix with vertical bars at active positions
         prefix = ""
         for i in range(connector_col):
@@ -231,10 +232,10 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
                 prefix += "│"
             else:
                 prefix += " "
-        
+
         # Sosa right-aligned in 4 chars after connector (3 chars)
         print(f"{prefix}{connector}{sosa_number:>4} {format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment)}")
-        
+
         # Update active bars for children
         if is_last:
             active_bars.discard(connector_col)
@@ -310,7 +311,8 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
     else:
         connector = "└── " if is_last else "├── "
     spouses = get_spouses(conn, individual_id)
-    spouse_names = ", ".join([spouse[2] for spouse in spouses]) if spouses else None
+    spouse_names = ", ".join([spouse[2]
+                             for spouse in spouses]) if spouses else None
 
     print(f"{prefix}{connector}{format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, marriage_partner_names=spouse_names)}")
 
@@ -386,7 +388,8 @@ Examples:
             sys.exit(1)
 
         # Single result - show the tree
-        db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[0]
+        db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[
+            0]
 
         if args.descendants:
             print(f"\n{'='*80}")

@@ -90,7 +90,7 @@ def display_individual(conn, individual):
         print(birth_info)
     elif birth_comment:
         print(f"Birth: {birth_comment}")
-    
+
     if dod or death_loc or death_comment:
         death_info = "Died:"
         if dod:
@@ -102,10 +102,10 @@ def display_individual(conn, individual):
         print(death_info)
     elif death_comment:
         print(f"Death: {death_comment}")
-    
+
     if profession:
         print(f"Profession: {profession}")
-    
+
     if marriage or marriage_loc or marriage_comment:
         marriage_info = "Married:"
         if marriage:
