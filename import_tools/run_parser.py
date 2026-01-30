@@ -4,14 +4,29 @@
 from genealogy_parser import create_database, parse_documents, store_data, get_date_warnings, clear_date_warnings
 import sys
 import os
+import argparse
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description='Parse genealogy ODT files into SQLite database')
+    parser.add_argument('--ignore-files', type=str, default=None,
+                        help='Comma-separated list of filenames to ignore during parsing')
+    args = parser.parse_args()
+
     folder_path = os.environ.get('GENEALOGY_DATA_DIR', 'data/sources')
     db_name = 'data/genealogy.db'
+
+    # Parse ignore list from argument or environment variable
+    ignore_files = set()
+    if args.ignore_files:
+        ignore_files = set(f.strip() for f in args.ignore_files.split(','))
+    elif os.environ.get('GENEALOGY_IGNORE_FILES'):
+        ignore_files = set(f.strip() for f in os.environ.get(
+            'GENEALOGY_IGNORE_FILES').split(','))
 
     print("="*80)
     print("GENEALOGY PARSER")
@@ -22,12 +37,15 @@ def main():
     print("   ✓ Database created")
 
     print(f"\n2. Parsing documents from: {folder_path}")
+    if ignore_files:
+        print(f"   Ignoring files: {', '.join(sorted(ignore_files))}")
     clear_date_warnings()  # Clear any previous warnings
-    individuals = parse_documents(folder_path)
+    individuals = parse_documents(folder_path, ignore_files=ignore_files)
     print(f"   ✓ Found {len(individuals)} individuals across all documents")
 
     print("\n3. Storing data in database...")
-    num_individuals, num_instances, num_relationships, merged_individuals = store_data(individuals, db_name)
+    num_individuals, num_instances, num_relationships, merged_individuals = store_data(
+        individuals, db_name)
     print(f"   ✓ Stored {num_individuals} unique individuals")
     print(f"   ✓ Created {num_instances} tree instance records")
     print(f"   ✓ Inferred {num_relationships} parent-child relationships")
@@ -39,7 +57,7 @@ def main():
     print(f"Canonical individuals: {num_individuals}")
     print(f"Tree instances: {num_instances}")
     print(f"Total relationships: {num_relationships}")
-    
+
     # Display merged individuals
     if merged_individuals:
         # Group by individual_id to show all trees per person
@@ -47,11 +65,12 @@ def main():
         merged_by_person = defaultdict(list)
         for merge in merged_individuals:
             merged_by_person[merge['individual_id']].append(merge)
-        
+
         print(f"\n{'='*80}")
-        print(f"CROSS-TREE MATCHES: {len(merged_by_person)} individual(s) found in multiple trees")
+        print(
+            f"CROSS-TREE MATCHES: {len(merged_by_person)} individual(s) found in multiple trees")
         print(f"{'='*80}")
-        
+
         for individual_id, merges in sorted(merged_by_person.items()):
             name = merges[0]['name']
             trees = sorted(set(m['family_tree'] for m in merges))

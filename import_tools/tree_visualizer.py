@@ -31,7 +31,7 @@ def colorize(text, color):
 
 def find_individual(conn, search_term, family_tree=None):
     """Find an individual by name or old_id.
-    
+
     Returns list of tuples: (individual_id, family_tree, old_id, canonical_name, ...)
     Deduplicates multiple instances with same (individual_id, family_tree, old_id) from different source files.
     """
@@ -79,7 +79,7 @@ def find_individual(conn, search_term, family_tree=None):
 
 def get_parents(conn, individual_id, family_tree):
     """Get parents of an individual within a specific family tree.
-    
+
     When a parent appears in multiple source files with the same (family_tree, old_id),
     we use the instance with the lowest old_id (or first alphabetically by source if same old_id).
     """
@@ -425,24 +425,29 @@ Examples:
             print("=" * 80)
             for individual in results:
                 # individual: individual_id, family_tree, old_id, canonical_name, ...
-                print(f"  {individual[2]:4d}  [{individual[1]:<30}]  {individual[3]}")
+                print(
+                    f"  {individual[2]:4d}  [{individual[1]:<30}]  {individual[3]}")
             print("=" * 80)
-            print("\nPlease specify the ID number or use --family-tree to select a specific tree.")
+            print(
+                "\nPlease specify the ID number or use --family-tree to select a specific tree.")
             sys.exit(1)
 
         # Single result - show the tree
         # Format: individual_id, family_tree, old_id, canonical_name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment
-        individual_id, family_tree, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[0]
+        individual_id, family_tree, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[
+            0]
 
         if args.descendants:
             print(f"\n{'='*80}")
-            print(f"DESCENDANT TREE FOR: {name} (Sosa {old_id}, Family: {family_tree})")
+            print(
+                f"DESCENDANT TREE FOR: {name} (Sosa {old_id}, Family: {family_tree})")
             print(f"{'='*80}\n")
             draw_descendant_tree(conn, individual_id, family_tree, "", True,
                                  max_depth=args.max_depth)
         else:
             print(f"\n{'='*80}")
-            print(f"ANCESTOR TREE FOR: {name} (Sosa {old_id}, Family: {family_tree})")
+            print(
+                f"ANCESTOR TREE FOR: {name} (Sosa {old_id}, Family: {family_tree})")
             print(f"{'='*80}\n")
             draw_ancestor_tree(conn, individual_id, family_tree, None, True)
 

@@ -169,7 +169,8 @@ def main():
             print("-" * 100)
             for individual in results:
                 # individual: id, old_id, family_tree, name, ...
-                print(f"{individual[1]:4d}  [{individual[2]:<30}]  {individual[3]}")
+                print(
+                    f"{individual[1]:4d}  [{individual[2]:<30}]  {individual[3]}")
             print("-" * 100)
             print("\nUse the ID number to see details for a specific person.")
     finally:

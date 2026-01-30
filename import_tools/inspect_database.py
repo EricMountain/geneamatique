@@ -21,7 +21,7 @@ def inspect_database(db_name='data/genealogy.db'):
     cursor.execute("SELECT COUNT(DISTINCT family_tree) FROM individuals")
     total_trees = cursor.fetchone()[0]
     print(f"Total family trees: {total_trees}")
-    
+
     # Show individuals per family tree
     cursor.execute("""
         SELECT family_tree, COUNT(*) 
