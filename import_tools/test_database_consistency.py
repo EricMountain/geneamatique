@@ -48,8 +48,9 @@ class TestDatabaseConsistency(unittest.TestCase):
         """Test that individuals table has all required columns."""
         self.cursor.execute("PRAGMA table_info(individuals)")
         columns = [column[1] for column in self.cursor.fetchall()]
-        required_columns = ['id', 'old_id', 'name', 'date_of_birth',
-                            'date_of_death', 'profession', 'marriage_date']
+        required_columns = ['id', 'old_id', 'name', 'date_of_birth', 'birth_location', 'birth_comment',
+                            'date_of_death', 'death_location', 'death_comment', 'profession',
+                            'marriage_date', 'marriage_location', 'marriage_comment']
         for col in required_columns:
             self.assertIn(
                 col, columns, f"Column {col} missing from individuals table")
@@ -376,22 +377,26 @@ class TestParserFunctionality(unittest.TestCase):
 
         # Test with complete data
         cell_text = """2. PERSON_A Sample Name
-    ° 4 Jan 1952 in City A
-    + 15 Oct 2007 in City B
+    ° 4 Jan 1952 à City A
+    + 15 Oct 2007 au City B
     PR Technician
-    X 28 Jul 1973 in City C"""
+    X 28 Jul 1973 à City C"""
 
         result = parse_individual_data(cell_text)
         self.assertIsNotNone(result)
         self.assertEqual(result['old_id'], 2)
         self.assertEqual(result['name'], 'PERSON_A Sample Name')
-        self.assertEqual(result['date_of_birth'],
-                         '4 Jan 1952 in City A')
-        self.assertEqual(result['date_of_death'],
-                         '15 Oct 2007 in City B')
+        # Check ISO8601 format for date
+        self.assertEqual(result['date_of_birth'], '1952-01-04')
+        self.assertEqual(result['birth_location'], 'City A')
+        self.assertIsNone(result['birth_comment'])
+        self.assertEqual(result['date_of_death'], '2007-10-15')
+        self.assertEqual(result['death_location'], 'City B')
+        self.assertIsNone(result['death_comment'])
         self.assertEqual(result['profession'], 'Technician')
-        self.assertEqual(result['marriage_date'],
-                         '28 Jul 1973 in City C')
+        self.assertEqual(result['marriage_date'], '1973-07-28')
+        self.assertEqual(result['marriage_location'], 'City C')
+        self.assertIsNone(result['marriage_comment'])
 
     def test_parse_individual_data_minimal(self):
         """Test parsing with minimal data (just name)."""
@@ -419,13 +424,70 @@ class TestParserFunctionality(unittest.TestCase):
         from .genealogy_parser import parse_individual_data
 
         # Test case for name ending with X followed by marriage
-        cell_text = "519. CALBRIX Françoise\nX 28 Jul 1973 in City C"
+        cell_text = "519. CALBRIX Françoise\nX 28 Jul 1973 à City C"
         result = parse_individual_data(cell_text)
 
         self.assertIsNotNone(result)
         self.assertEqual(result['old_id'], 519)
         self.assertEqual(result['name'], 'CALBRIX Françoise')
-        self.assertEqual(result['marriage_date'], '28 Jul 1973 in City C')
+        self.assertEqual(result['marriage_date'], '1973-07-28')
+        self.assertEqual(result['marriage_location'], 'City C')
+
+    def test_parse_french_revolutionary_date(self):
+        """Test parsing of French Revolutionary calendar dates."""
+        from .genealogy_parser import parse_individual_data
+
+        # Test with only French Revolutionary date
+        cell_text = """3. PERSON_D\n° 8 thermidor an II"""
+        result = parse_individual_data(cell_text)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result['old_id'], 3)
+        # 8 thermidor an II = 26 July 1794
+        self.assertEqual(result['date_of_birth'], '1794-07-26')
+
+    def test_parse_gregorian_with_french_revolutionary(self):
+        """Test parsing when both Gregorian and French Revolutionary dates are present."""
+        from .genealogy_parser import parse_individual_data
+
+        # Test with both dates (consistent)
+        cell_text = """4. PERSON_E\n° 26 Jul 1794 (8 thermidor an II)"""
+        result = parse_individual_data(cell_text)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result['old_id'], 4)
+        # Should use Gregorian date
+        self.assertEqual(result['date_of_birth'], '1794-07-26')
+
+    def test_parse_comment_without_date(self):
+        """Test parsing when there's a comment but no date."""
+        from .genealogy_parser import parse_individual_data
+
+        cell_text = """5. PERSON_F\n° date unknown\n+ before 1850"""
+        result = parse_individual_data(cell_text)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result['old_id'], 5)
+        self.assertIsNone(result['date_of_birth'])
+        self.assertEqual(result['birth_comment'], 'date unknown')
+        self.assertIsNone(result['date_of_death'])
+        self.assertEqual(result['death_comment'], 'before 1850')
+
+    def test_parse_comment_in_parentheses(self):
+        """Test parsing when there's a comment in parentheses after the date."""
+        from .genealogy_parser import parse_individual_data
+
+        cell_text = """6. PERSON_G\n° 15 Mar 1920 à Paris (premature birth)\n+ 2 Sep 1945 au Berlin (war casualty)"""
+        result = parse_individual_data(cell_text)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result['old_id'], 6)
+        self.assertEqual(result['date_of_birth'], '1920-03-15')
+        self.assertEqual(result['birth_location'], 'Paris')
+        self.assertEqual(result['birth_comment'], 'premature birth')
+        self.assertEqual(result['date_of_death'], '1945-09-02')
+        self.assertEqual(result['death_location'], 'Berlin')
+        self.assertEqual(result['death_comment'], 'war casualty')
 
 
 if __name__ == '__main__':

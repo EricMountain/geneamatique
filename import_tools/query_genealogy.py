@@ -13,14 +13,18 @@ def find_individual(conn, search_term):
     try:
         old_id = int(search_term)
         cursor.execute("""
-            SELECT id, old_id, name, date_of_birth, date_of_death, profession, marriage_date
+            SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+                   date_of_death, death_location, death_comment, profession,
+                   marriage_date, marriage_location, marriage_comment
             FROM individuals
             WHERE old_id = ?
         """, (old_id,))
     except ValueError:
         # Search by name
         cursor.execute("""
-            SELECT id, old_id, name, date_of_birth, date_of_death, profession, marriage_date
+            SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+                   date_of_death, death_location, death_comment, profession,
+                   marriage_date, marriage_location, marriage_comment
             FROM individuals
             WHERE name LIKE ?
         """, (f"%{search_term}%",))
@@ -69,20 +73,50 @@ def get_sources(conn, individual_id):
 
 def display_individual(conn, individual):
     """Display detailed information about an individual."""
-    db_id, old_id, name, dob, dod, profession, marriage = individual
+    db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, profession, marriage, marriage_loc, marriage_comment = individual
 
     print(f"\n{'='*80}")
     print(f"{name}")
     print(f"{'='*80}")
     print(f"ID: {old_id} (Database ID: {db_id})")
-    if dob:
-        print(f"Born: {dob}")
-    if dod:
-        print(f"Died: {dod}")
+    if dob or birth_loc or birth_comment:
+        birth_info = "Born:"
+        if dob:
+            birth_info += f" {dob}"
+        if birth_loc:
+            birth_info += f" à {birth_loc}"
+        if birth_comment:
+            birth_info += f" ({birth_comment})"
+        print(birth_info)
+    elif birth_comment:
+        print(f"Birth: {birth_comment}")
+    
+    if dod or death_loc or death_comment:
+        death_info = "Died:"
+        if dod:
+            death_info += f" {dod}"
+        if death_loc:
+            death_info += f" à {death_loc}"
+        if death_comment:
+            death_info += f" ({death_comment})"
+        print(death_info)
+    elif death_comment:
+        print(f"Death: {death_comment}")
+    
     if profession:
         print(f"Profession: {profession}")
-    if marriage:
-        print(f"Married: {marriage}")
+    
+    if marriage or marriage_loc or marriage_comment:
+        marriage_info = "Married:"
+        if marriage:
+            marriage_info += f" {marriage}"
+        if marriage_loc:
+            marriage_info += f" à {marriage_loc}"
+        if marriage_comment:
+            marriage_info += f" ({marriage_comment})"
+        print(marriage_info)
+    elif marriage_comment:
+        print(f"Marriage: {marriage_comment}")
 
     # Sources
     sources = get_sources(conn, db_id)

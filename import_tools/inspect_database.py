@@ -27,16 +27,27 @@ def inspect_database(db_name='data/genealogy.db'):
     print("SAMPLE INDIVIDUALS (first 10):")
     print("-"*80)
     cursor.execute("""
-        SELECT id, old_id, name, date_of_birth, date_of_death, profession 
+        SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+               date_of_death, death_location, death_comment, profession 
         FROM individuals 
         LIMIT 10
     """)
     for row in cursor.fetchall():
         print(f"\nID: {row[0]} (old_id: {row[1]})")
         print(f"  Name: {row[2]}")
-        print(f"  Born: {row[3] or 'Unknown'}")
-        print(f"  Died: {row[4] or 'Unknown'}")
-        print(f"  Profession: {row[5] or 'Unknown'}")
+        birth_info = row[3] or 'Unknown'
+        if row[4]:  # birth_location
+            birth_info += f" à {row[4]}"
+        if row[5]:  # birth_comment
+            birth_info += f" ({row[5]})"
+        print(f"  Born: {birth_info}")
+        death_info = row[6] or 'Unknown'
+        if row[7]:  # death_location
+            death_info += f" à {row[7]}"
+        if row[8]:  # death_comment
+            death_info += f" ({row[8]})"
+        print(f"  Died: {death_info}")
+        print(f"  Profession: {row[9] or 'Unknown'}")
 
         # Get source files
         cursor.execute(

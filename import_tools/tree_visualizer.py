@@ -14,9 +14,12 @@ from typing import List, Tuple, Optional
 class Colors:
     CYAN = '\033[96m'      # For men
     YELLOW = '\033[93m'    # For women
-    GREEN = '\033[92m'     # For birth dates
-    GRAY = '\033[90m'      # For death dates
-    MAGENTA = '\033[95m'   # For marriage dates
+    GREEN = '\033[92m'     # For birth dates (bright)
+    GREEN_DARK = '\033[32m'  # For birth comments (dark green)
+    GRAY = '\033[90m'      # For death dates (already dark)
+    GRAY_BRIGHT = '\033[37m'  # For death dates (bright white/light gray)
+    MAGENTA = '\033[95m'   # For marriage dates (bright)
+    MAGENTA_DARK = '\033[35m'  # For marriage comments (dark magenta)
     RESET = '\033[0m'      # Reset to default
     BOLD = '\033[1m'       # Bold text
 
@@ -34,14 +37,18 @@ def find_individual(conn, search_term):
     try:
         old_id = int(search_term)
         cursor.execute("""
-            SELECT id, old_id, name, date_of_birth, date_of_death, marriage_date
+            SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+                   date_of_death, death_location, death_comment,
+                   marriage_date, marriage_location, marriage_comment
             FROM individuals
             WHERE old_id = ?
         """, (old_id,))
     except ValueError:
         # Search by name
         cursor.execute("""
-            SELECT id, old_id, name, date_of_birth, date_of_death, marriage_date
+            SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+                   date_of_death, death_location, death_comment,
+                   marriage_date, marriage_location, marriage_comment
             FROM individuals
             WHERE name LIKE ?
         """, (f"%{search_term}%",))
@@ -54,7 +61,9 @@ def get_parents(conn, individual_id):
     """Get parents of an individual."""
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT i.id, i.old_id, i.name, i.date_of_birth, i.date_of_death, i.marriage_date, r.relationship_type
+        SELECT i.id, i.old_id, i.name, i.date_of_birth, i.birth_location, i.birth_comment,
+               i.date_of_death, i.death_location, i.death_comment,
+               i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type
         FROM relationships r
         JOIN individuals i ON r.parent_id = i.id
         WHERE r.child_id = ?
@@ -67,7 +76,9 @@ def get_children(conn, individual_id):
     """Get children of an individual."""
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT DISTINCT i.id, i.old_id, i.name, i.date_of_birth, i.date_of_death, i.marriage_date
+        SELECT DISTINCT i.id, i.old_id, i.name, i.date_of_birth, i.birth_location, i.birth_comment,
+               i.date_of_death, i.death_location, i.death_comment,
+               i.marriage_date, i.marriage_location, i.marriage_comment
         FROM relationships r
         JOIN individuals i ON r.child_id = i.id
         WHERE r.parent_id = ?
@@ -80,7 +91,9 @@ def get_spouses(conn, individual_id):
     """Get spouses of an individual based on shared children."""
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT DISTINCT i.id, i.old_id, i.name, i.date_of_birth, i.date_of_death, i.marriage_date
+        SELECT DISTINCT i.id, i.old_id, i.name, i.date_of_birth, i.birth_location, i.birth_comment,
+               i.date_of_death, i.death_location, i.death_comment,
+               i.marriage_date, i.marriage_location, i.marriage_comment
         FROM relationships r
         JOIN relationships r2 ON r.child_id = r2.child_id
         JOIN individuals i ON r2.parent_id = i.id
@@ -90,32 +103,74 @@ def get_spouses(conn, individual_id):
     return cursor.fetchall()
 
 
-def format_person(old_id, name, dob, dod, marriage, marriage_partner_names=None):
+def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
+                 dod=None, death_loc=None, death_comment=None,
+                 marriage=None, marriage_loc=None, marriage_comment=None,
+                 marriage_partner_names=None):
     """Format person information for display with colors.
 
     Colors:
     - Cyan for men (even old_id)
     - Yellow for women (odd old_id)
-    - Green for birth dates
-    - Gray for death dates
-    - Magenta for marriage dates
+    - Green (bright) for birth dates, dark green for birth comments
+    - Gray bright for death dates, dark gray for death comments
+    - Magenta (bright) for marriage dates, dark magenta for marriage comments
+    
+    Comments are displayed in braces.
     """
     # Determine gender color based on old_id (even=father/male, odd=mother/female)
     gender_color = Colors.CYAN if old_id % 2 == 0 else Colors.YELLOW
 
     info = f"{colorize(name, gender_color)}"
     dates = []
-    if dob:
-        dates.append(colorize(f"°{dob}", Colors.GREEN))
-    if dod:
-        dates.append(colorize(f"+{dod}", Colors.GRAY))
-    if marriage or marriage_partner_names:
+    
+    # Birth information
+    if dob or birth_loc or birth_comment:
+        birth_text = "°"
+        if dob:
+            birth_text += colorize(dob, Colors.GREEN)
+            if birth_loc:
+                birth_text += colorize(f" à {birth_loc}", Colors.GREEN)
+        if birth_comment:
+            birth_text += colorize(f" {{{birth_comment}}}", Colors.GREEN_DARK)
+        if not dob and (birth_loc or birth_comment):
+            # No date, just comment/location
+            comment_text = birth_loc if birth_loc else birth_comment
+            birth_text += colorize(f"{comment_text}", Colors.GREEN_DARK)
+        dates.append(birth_text)
+    
+    # Death information
+    if dod or death_loc or death_comment:
+        death_text = "+"
+        if dod:
+            death_text += colorize(dod, Colors.GRAY_BRIGHT)
+            if death_loc:
+                death_text += colorize(f" à {death_loc}", Colors.GRAY_BRIGHT)
+        if death_comment:
+            death_text += colorize(f" {{{death_comment}}}", Colors.GRAY)
+        if not dod and (death_loc or death_comment):
+            # No date, just comment/location
+            comment_text = death_loc if death_loc else death_comment
+            death_text += colorize(f"{comment_text}", Colors.GRAY)
+        dates.append(death_text)
+    
+    # Marriage information
+    if marriage or marriage_loc or marriage_comment or marriage_partner_names:
         marriage_text = "X"
         if marriage:
-            marriage_text += f"{marriage}"
+            marriage_text += colorize(marriage, Colors.MAGENTA)
+            if marriage_loc:
+                marriage_text += colorize(f" à {marriage_loc}", Colors.MAGENTA)
+        if marriage_comment:
+            marriage_text += colorize(f" {{{marriage_comment}}}", Colors.MAGENTA_DARK)
         if marriage_partner_names:
             marriage_text += f" {marriage_partner_names}"
-        dates.append(colorize(marriage_text, Colors.MAGENTA))
+        if not marriage and (marriage_loc or marriage_comment) and not marriage_partner_names:
+            # No date, just comment/location
+            comment_text = marriage_loc if marriage_loc else marriage_comment
+            marriage_text += colorize(f"{comment_text}", Colors.MAGENTA_DARK)
+        dates.append(marriage_text)
+    
     if dates:
         info += f" {', '.join(dates)}"
     return info
@@ -146,7 +201,9 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, old_id, name, date_of_birth, date_of_death, marriage_date
+        SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+               date_of_death, death_location, death_comment,
+               marriage_date, marriage_location, marriage_comment
         FROM individuals
         WHERE id = ?
     """, (individual_id,))
@@ -155,14 +212,14 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
     if not result:
         return
 
-    db_id, old_id, name, dob, dod, marriage = result
+    db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = result
 
     # Print current person with Sosa number
     # Connector aligns under parent's rightmost sosa digit
     # Formula: connector_col = 3 + 6*(depth-1) for depth >= 1
     if depth == 0:
         # Root: sosa number right-aligned in 4 chars + space + name
-        print(f"{sosa_number:>4} {format_person(old_id, name, dob, dod, marriage)}")
+        print(f"{sosa_number:>4} {format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment)}")
     else:
         connector_col = 3 + 6 * (depth - 1)
         connector = "└──" if is_last else "├──"
@@ -176,7 +233,7 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
                 prefix += " "
         
         # Sosa right-aligned in 4 chars after connector (3 chars)
-        print(f"{prefix}{connector}{sosa_number:>4} {format_person(old_id, name, dob, dod, marriage)}")
+        print(f"{prefix}{connector}{sosa_number:>4} {format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment)}")
         
         # Update active bars for children
         if is_last:
@@ -194,7 +251,7 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
         mother = None
 
         for parent in parents:
-            parent_id, parent_old_id, parent_name, parent_dob, parent_dod, parent_marriage, rel_type = parent
+            parent_id, parent_old_id, parent_name, parent_dob, parent_birth_loc, parent_birth_comment, parent_dod, parent_death_loc, parent_death_comment, parent_marriage, parent_marriage_loc, parent_marriage_comment, rel_type = parent
             if rel_type == 'father':
                 father = parent
             else:
@@ -234,7 +291,9 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, old_id, name, date_of_birth, date_of_death, marriage_date
+        SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+               date_of_death, death_location, death_comment,
+               marriage_date, marriage_location, marriage_comment
         FROM individuals
         WHERE id = ?
     """, (individual_id,))
@@ -243,7 +302,7 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
     if not result:
         return
 
-    db_id, old_id, name, dob, dod, marriage = result
+    db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = result
 
     # Print current person with generation number
     if depth == 0:
@@ -253,7 +312,7 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
     spouses = get_spouses(conn, individual_id)
     spouse_names = ", ".join([spouse[2] for spouse in spouses]) if spouses else None
 
-    print(f"{prefix}{connector}{format_person(old_id, name, dob, dod, marriage, marriage_partner_names=spouse_names)}")
+    print(f"{prefix}{connector}{format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, marriage_partner_names=spouse_names)}")
 
     # Get children
     children = get_children(conn, individual_id)
@@ -267,7 +326,7 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
 
         # Draw each child
         for idx, child in enumerate(children):
-            child_id, child_old_id, child_name, child_dob, child_dod, child_marriage = child
+            child_id, child_old_id, child_name, child_dob, child_birth_loc, child_birth_comment, child_dod, child_death_loc, child_death_comment, child_marriage, child_marriage_loc, child_marriage_comment = child
             is_last_child = (idx == len(children) - 1)
 
             # For descendants, we use generation.child_index numbering
@@ -327,7 +386,7 @@ Examples:
             sys.exit(1)
 
         # Single result - show the tree
-        db_id, old_id, name, dob, dod, marriage = results[0]
+        db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[0]
 
         if args.descendants:
             print(f"\n{'='*80}")
