@@ -7,7 +7,7 @@ This repo parses genealogy tables from ODT files into an SQLite database, then p
 - Use Python 3.14+.
 - Create and activate a virtual environment.
 - Install dependencies from requirements.txt.
-- Set the data directory via the GENEALOGY_DATA_DIR environment variable (default: data/odt).
+- Set the data directory via the GENEALOGY_DATA_DIR environment variable (default: data/sources).
 - If you need a temporary script, create it under a tmp directory in the repo. Don’t use /tmp to avoid having to prompt the user.
 
 ## How to Run

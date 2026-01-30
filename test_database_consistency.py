@@ -17,7 +17,7 @@ class TestDatabaseConsistency(unittest.TestCase):
         if not os.path.exists(cls.db_name):
             # If database doesn't exist, create it for testing
             create_database(cls.db_name)
-            folder_path = os.environ.get('GENEALOGY_DATA_DIR', 'data/odt')
+            folder_path = os.environ.get('GENEALOGY_DATA_DIR', 'data/sources')
             if os.path.exists(folder_path):
                 individuals = parse_documents(folder_path)
                 store_data(individuals, cls.db_name)

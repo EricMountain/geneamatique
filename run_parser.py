@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def main():
-    folder_path = os.environ.get('GENEALOGY_DATA_DIR', 'data/odt')
+    folder_path = os.environ.get('GENEALOGY_DATA_DIR', 'data/sources')
     db_name = 'data/genealogy.db'
 
     print("="*80)

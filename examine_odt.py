@@ -48,8 +48,8 @@ def examine_document(filepath):
 if __name__ == "__main__":
     # Examine a couple of sample files (anonymized placeholders)
     files = [
-        "data/odt/2 Sample Person.odt",
-        "data/odt/16 Sample Person.odt",
+        "data/sources/2 Sample Person.odt",
+        "data/sources/16 Sample Person.odt",
     ]
 
     for filepath in files:

@@ -175,20 +175,21 @@ def parse_document(filepath):
 
 
 def parse_documents(folder_path):
-    """Parse all ODT documents in the folder."""
+    """Parse all ODT documents in the folder and subfolders."""
     all_individuals = []
 
     if not os.path.exists(folder_path):
         print(f"Folder not found: {folder_path}")
         return all_individuals
 
-    for filename in sorted(os.listdir(folder_path)):
-        if filename.endswith('.odt') and not filename.startswith('tableau vide'):
-            filepath = os.path.join(folder_path, filename)
-            print(f"Parsing {filename}...")
-            individuals = parse_document(filepath)
-            all_individuals.extend(individuals)
-            print(f"  Found {len(individuals)} individuals")
+    for root, dirs, files in os.walk(folder_path):
+        for filename in sorted(files):
+            if filename.endswith('.odt') and not filename.startswith('tableau vide'):
+                filepath = os.path.join(root, filename)
+                print(f"Parsing {os.path.relpath(filepath, folder_path)}...")
+                individuals = parse_document(filepath)
+                all_individuals.extend(individuals)
+                print(f"  Found {len(individuals)} individuals")
 
     return all_individuals
 
@@ -329,7 +330,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
 
 
 if __name__ == "__main__":
-    folder_path = os.environ.get('GENEALOGY_DATA_DIR', 'data/odt')
+    folder_path = os.environ.get('GENEALOGY_DATA_DIR', 'data/sources')
     db_name = 'data/genealogy.db'
 
     print("Creating database...")
