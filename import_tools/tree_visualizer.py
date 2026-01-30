@@ -20,6 +20,7 @@ class Colors:
     GRAY_BRIGHT = '\033[37m'  # For death dates (bright white/light gray)
     MAGENTA = '\033[95m'   # For marriage dates (bright)
     MAGENTA_DARK = '\033[35m'  # For marriage comments (dark magenta)
+    WHITE_DIM = '\033[37m'  # For name comments (dim white)
     RESET = '\033[0m'      # Reset to default
     BOLD = '\033[1m'       # Bold text
 
@@ -212,7 +213,7 @@ def get_spouses(conn, individual_id, family_tree):
 def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
                   dod=None, death_loc=None, death_comment=None,
                   marriage=None, marriage_loc=None, marriage_comment=None,
-                  marriage_partner_names=None, db_id=None):
+                  marriage_partner_names=None, db_id=None, name_comment=None):
     """Format person information for display with colors.
 
     Colors:
@@ -221,6 +222,7 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
     - Green (bright) for birth dates, dark green for birth comments
     - Gray bright for death dates, dark gray for death comments
     - Magenta (bright) for marriage dates, dark magenta for marriage comments
+    - White dim for name comments
 
     Comments are displayed in braces.
     """
@@ -228,6 +230,8 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
     gender_color = Colors.CYAN if old_id % 2 == 0 else Colors.YELLOW
 
     info = f"{colorize(name, gender_color)}"
+    if name_comment:
+        info += colorize(f" {{{name_comment}}}", Colors.WHITE_DIM)
     dates = []
 
     # Birth information
@@ -298,7 +302,7 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT i.id, iti.old_id, i.canonical_name, 
+        SELECT i.id, iti.old_id, i.canonical_name, i.name_comment,
                i.date_of_birth, i.birth_location, i.birth_comment,
                i.date_of_death, i.death_location, i.death_comment,
                i.marriage_date, i.marriage_location, i.marriage_comment
@@ -311,14 +315,14 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
     if not result:
         return
 
-    db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = result
+    db_id, old_id, name, name_comment, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = result
 
     # Print current person with Sosa number
     # Connector aligns under parent's rightmost sosa digit
     # Formula: connector_col = 3 + 6*(depth-1) for depth >= 1
     if depth == 0:
         # Root: sosa number right-aligned in 4 chars + space + name
-        print(f"{sosa_number:>4} {format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, db_id=db_id)}")
+        print(f"{sosa_number:>4} {format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, db_id=db_id, name_comment=name_comment)}")
     else:
         connector_col = 3 + 6 * (depth - 1)
         connector = "└──" if is_last else "├──"
@@ -332,7 +336,7 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
                 prefix += " "
 
         # Sosa right-aligned in 4 chars after connector (3 chars)
-        print(f"{prefix}{connector}{sosa_number:>4} {format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, db_id=db_id)}")
+        print(f"{prefix}{connector}{sosa_number:>4} {format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, db_id=db_id, name_comment=name_comment)}")
 
         # Update active bars for children
         if is_last:
@@ -411,7 +415,7 @@ def draw_descendant_tree(conn, individual_id, family_tree, prefix="", is_last=Tr
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT i.id, iti.old_id, i.canonical_name,
+        SELECT i.id, iti.old_id, i.canonical_name, i.name_comment,
                i.date_of_birth, i.birth_location, i.birth_comment,
                i.date_of_death, i.death_location, i.death_comment,
                i.marriage_date, i.marriage_location, i.marriage_comment
@@ -424,7 +428,7 @@ def draw_descendant_tree(conn, individual_id, family_tree, prefix="", is_last=Tr
     if not result:
         return
 
-    db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = result
+    db_id, old_id, name, name_comment, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = result
 
     # Print current person with generation number
     if depth == 0:
@@ -435,7 +439,7 @@ def draw_descendant_tree(conn, individual_id, family_tree, prefix="", is_last=Tr
     spouse_names = ", ".join([spouse[2]
                              for spouse in spouses]) if spouses else None
 
-    print(f"{prefix}{connector}{format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, marriage_partner_names=spouse_names, db_id=db_id)}")
+    print(f"{prefix}{connector}{format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, marriage_partner_names=spouse_names, db_id=db_id, name_comment=name_comment)}")
 
     # Get children
     children = get_children(conn, individual_id, family_tree)

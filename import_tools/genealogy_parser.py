@@ -33,6 +33,7 @@ def create_database(db_name='data/genealogy.db'):
     CREATE TABLE individuals (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         canonical_name TEXT NOT NULL,
+        name_comment TEXT,
         date_of_birth TEXT,
         birth_location TEXT,
         birth_comment TEXT,
@@ -117,6 +118,25 @@ def get_cell_text(cell):
     return '\n'.join(text_parts)
 
 
+def normalize_location_name(location):
+    """Normalize location names by title-casing all-uppercase names.
+    
+    Args:
+        location: Location string to normalize
+        
+    Returns:
+        Normalized location string
+    """
+    if not location:
+        return location
+    
+    # If the location is all uppercase (and contains at least one letter), title-case it
+    if location.isupper() and any(c.isalpha() for c in location):
+        return location.title()
+    
+    return location
+
+
 def parse_event_details(text_after_marker, event_type='birth', source_file=None, person_name=None):
     """Parse event details (date, location, comment) from text after a marker.
 
@@ -141,13 +161,31 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
     original_gregorian = None
     original_revolutionary = None
 
+    # Skip common event type prefixes that might appear in the text
+    event_prefixes = [
+        r'^(naissance|birth|baptême|baptism)\s+',
+        r'^(décès|death|décédé|mort|décédée|morte)\s+',
+        r'^(mariage|marriage|marié|mariée)\s+',
+        r'^(divorce|divorcé|divorcée)\s+',
+        r'^(inhumation|burial|enterrement)\s+',
+        r'^(émigration|immigration)\s+'
+    ]
+    
+    for prefix_pattern in event_prefixes:
+        match = re.match(prefix_pattern, text, re.IGNORECASE)
+        if match:
+            text = text[match.end():].strip()
+            break  # Only remove one prefix
+
     # French Revolutionary calendar month names
     fr_months = ['vendémiaire', 'brumaire', 'frimaire', 'nivôse', 'pluviôse', 'ventôse',
                  'germinal', 'floréal', 'prairial', 'messidor', 'thermidor', 'fructidor']
 
     # Try to match a date at the beginning
-    # Gregorian date patterns: "4 Jan 1952", "04/01/1952", "1952-01-04", "04.01.1952", "4 Jan1952", "1er juillet 1788"
+    # Gregorian date patterns: "4 Jan 1952", "04/01/1952", "1952-01-04", "04.01.1952", "4 Jan1952", "1er juillet 1788", "26avril 1831"
     gregorian_patterns = [
+        r'^(1er|\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})',
+        r'^(1er|\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)(\d{4})',
         r'^(1er|\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})',
         r'^(1er|\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)(\d{4})',
         r'^(\d{1,2})/(\d{1,2})/(\d{4})',
@@ -282,20 +320,20 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
                 paren_content = paren_match.group(1).strip()
                 if paren_content.isdigit():
                     # Department number - keep it as part of location
-                    location = potential_location
+                    location = normalize_location_name(potential_location)
                 else:
                     # Comment - split it
-                    location = potential_location[:paren_match.start()].strip()
+                    location = normalize_location_name(potential_location[:paren_match.start()].strip())
                     comment = paren_content
             else:
-                location = potential_location
+                location = normalize_location_name(potential_location)
         else:
             # No "à"/"au" - assume remaining text is location unless it's entirely in parentheses
             if remaining_text.startswith('(') and remaining_text.endswith(')'):
                 paren_content = remaining_text[1:-1].strip()
                 if paren_content.isdigit():
                     # Department number in parentheses - treat as location
-                    location = remaining_text
+                    location = normalize_location_name(remaining_text)
                 else:
                     # Comment in parentheses
                     comment = paren_content
@@ -308,14 +346,14 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
                     if paren_content.isdigit() and paren_match.start() > 0:
                         # There's text before the parentheses, and parentheses contain department number
                         # Keep it all as location
-                        location = remaining_text
+                        location = normalize_location_name(remaining_text)
                     else:
                         # Split: text before parentheses is location, content is comment
-                        location = remaining_text[:paren_match.start()].strip()
+                        location = normalize_location_name(remaining_text[:paren_match.start()].strip())
                         comment = paren_content
                 else:
                     # No parentheses - entire remaining text is location
-                    location = remaining_text
+                    location = normalize_location_name(remaining_text)
 
     return {'date': date_iso, 'location': location, 'comment': comment}
 
@@ -329,6 +367,30 @@ def parse_date_to_iso(date_str):
                     'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
     month_map_fr = {'janvier': 1, 'février': 2, 'mars': 3, 'avril': 4, 'mai': 5, 'juin': 6,
                     'juillet': 7, 'août': 8, 'septembre': 9, 'octobre': 10, 'novembre': 11, 'décembre': 12}
+
+    # Try "26avril 1831" format (no space between day and month)
+    match = re.match(r'^(1er|\d{1,2})(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
+    if match:
+        day_str = match.group(1)
+        day = 1 if day_str == '1er' else int(day_str)
+        month_str = match.group(2).lower()[:3]
+        year = int(match.group(3))
+        month = month_map_en.get(month_str) or month_map_fr.get(
+            match.group(2).lower())
+        if month:
+            return f"{year:04d}-{month:02d}-{day:02d}"
+
+    # Try "26avril1831" format (no space between day and month, no space before year)
+    match = re.match(r'^(1er|\d{1,2})(\w+)(\d{4})$', date_str, re.IGNORECASE)
+    if match:
+        day_str = match.group(1)
+        day = 1 if day_str == '1er' else int(day_str)
+        month_str = match.group(2).lower()[:3]
+        year = int(match.group(3))
+        month = month_map_en.get(month_str) or month_map_fr.get(
+            match.group(2).lower())
+        if month:
+            return f"{year:04d}-{month:02d}-{day:02d}"
 
     # Try "4 Jan 1952" format or "1er juillet 1788"
     match = re.match(r'^(1er|\d{1,2})\s+(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
@@ -474,7 +536,16 @@ def parse_individual_data(cell_text, source_file=None, family_tree=None):
             return None
 
     old_id = int(match.group(1))
-    name = match.group(2).strip()
+    full_name = match.group(2).strip()
+    
+    # Extract parenthetical comment from name if present
+    name_comment = None
+    name_match = re.search(r'\s*\(([^)]+)\)$', full_name)
+    if name_match:
+        name_comment = name_match.group(1).strip()
+        name = full_name[:name_match.start()].strip()
+    else:
+        name = full_name
 
     # Parse other fields
     birth_details = {'date': None, 'location': None, 'comment': None}
@@ -499,6 +570,7 @@ def parse_individual_data(cell_text, source_file=None, family_tree=None):
         'old_id': old_id,
         'family_tree': family_tree,
         'name': name,
+        'name_comment': name_comment,
         'date_of_birth': birth_details['date'],
         'birth_location': birth_details['location'],
         'birth_comment': birth_details['comment'],
@@ -835,22 +907,23 @@ def store_data(individuals, db_name='data/genealogy.db'):
                     # No match found - create new canonical individual
                     cursor.execute('''
                         INSERT INTO individuals
-                        (canonical_name, date_of_birth, birth_location, birth_comment,
+                        (canonical_name, name_comment, date_of_birth, birth_location, birth_comment,
                          date_of_death, death_location, death_comment, profession,
                          marriage_date, marriage_location, marriage_comment)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         individual['name'],
-                        individual['date_of_birth'],
-                        individual['birth_location'],
-                        individual['birth_comment'],
-                        individual['date_of_death'],
-                        individual['death_location'],
-                        individual['death_comment'],
-                        individual['profession'],
-                        individual['marriage_date'],
-                        individual['marriage_location'],
-                        individual['marriage_comment']
+                        individual.get('name_comment'),
+                        individual.get('date_of_birth'),
+                        individual.get('birth_location'),
+                        individual.get('birth_comment'),
+                        individual.get('date_of_death'),
+                        individual.get('death_location'),
+                        individual.get('death_comment'),
+                        individual.get('profession'),
+                        individual.get('marriage_date'),
+                        individual.get('marriage_location'),
+                        individual.get('marriage_comment')
                     ))
                     individual_id = cursor.lastrowid
                 else:
