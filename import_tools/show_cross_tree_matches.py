@@ -57,6 +57,7 @@ def show_cross_tree_individuals(db_name='data/genealogy.db'):
         instances = cursor.fetchall()
         for family_tree, old_id, name_variant, source_file in instances:
             print(f"    • {family_tree}")
+            print(f"      Database ID: {individual_id}")
             print(f"      Sosa ID: {old_id}")
             if name_variant and name_variant != name:
                 print(f"      Name variant: {name_variant}")
