@@ -80,15 +80,15 @@ def find_individual(conn, search_term, family_tree=None):
 
 def get_parents(conn, individual_id, family_tree=None):
     """Get parents of an individual, optionally within a specific family tree.
-    
+
     If family_tree is provided, first try to find relationship in that tree.
     If not found, look across all trees (for cross-tree relationships).
-    
+
     When a parent appears in multiple source files with the same (family_tree, old_id),
     we use the instance with the lowest old_id (or first alphabetically by source if same old_id).
     """
     cursor = conn.cursor()
-    
+
     # First try within the specified family_tree
     if family_tree:
         cursor.execute("""
@@ -106,7 +106,7 @@ def get_parents(conn, individual_id, family_tree=None):
         results = cursor.fetchall()
         if results:
             return results
-        
+
         # Not found in specified tree, try any tree where this individual appears
         cursor.execute("""
             SELECT i.id, iti.old_id, i.canonical_name, 
@@ -134,18 +134,18 @@ def get_parents(conn, individual_id, family_tree=None):
             GROUP BY i.id, r.relationship_type
             ORDER BY r.relationship_type DESC
         """, (individual_id,))
-    
+
     return cursor.fetchall()
 
 
 def get_children(conn, individual_id, family_tree=None):
     """Get children of an individual, optionally within a specific family tree.
-    
+
     If family_tree is provided, first try to find relationships in that tree.
     If not found, look across all trees (for cross-tree relationships).
     """
     cursor = conn.cursor()
-    
+
     # First try within the specified family_tree
     if family_tree:
         cursor.execute("""
@@ -162,7 +162,7 @@ def get_children(conn, individual_id, family_tree=None):
         results = cursor.fetchall()
         if results:
             return results
-        
+
         # Not found in specified tree, try any tree where this individual appears
         cursor.execute("""
             SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
@@ -188,7 +188,7 @@ def get_children(conn, individual_id, family_tree=None):
             WHERE r.parent_id = ?
             ORDER BY iti.old_id
         """, (individual_id,))
-    
+
     return cursor.fetchall()
 
 
@@ -269,11 +269,11 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
 
     if dates:
         info += f" {', '.join(dates)}"
-    
+
     # Add database ID in square brackets if provided
     if db_id is not None:
         info += f" [{db_id}]"
-    
+
     return info
 
 
@@ -358,7 +358,7 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
             WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?
         """, (name, dob, individual_id))
         other_instances = cursor.fetchall()
-        
+
         # Try to find parents for any of these other instances
         for other_id, other_tree in other_instances:
             parents = get_parents(conn, other_id, other_tree)
@@ -455,7 +455,7 @@ def draw_descendant_tree(conn, individual_id, family_tree, prefix="", is_last=Tr
             WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?
         """, (name, dob, individual_id))
         other_instances = cursor.fetchall()
-        
+
         # Try to find children for any of these other instances
         for other_id, other_tree in other_instances:
             children = get_children(conn, other_id, other_tree)

@@ -120,20 +120,20 @@ def get_cell_text(cell):
 
 def normalize_location_name(location):
     """Normalize location names by title-casing all-uppercase names.
-    
+
     Args:
         location: Location string to normalize
-        
+
     Returns:
         Normalized location string
     """
     if not location:
         return location
-    
+
     # If the location is all uppercase (and contains at least one letter), title-case it
     if location.isupper() and any(c.isalpha() for c in location):
         return location.title()
-    
+
     return location
 
 
@@ -170,7 +170,7 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
         r'^(inhumation|burial|enterrement)\s+',
         r'^(émigration|immigration)\s+'
     ]
-    
+
     for prefix_pattern in event_prefixes:
         match = re.match(prefix_pattern, text, re.IGNORECASE)
         if match:
@@ -323,7 +323,8 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
                     location = normalize_location_name(potential_location)
                 else:
                     # Comment - split it
-                    location = normalize_location_name(potential_location[:paren_match.start()].strip())
+                    location = normalize_location_name(
+                        potential_location[:paren_match.start()].strip())
                     comment = paren_content
             else:
                 location = normalize_location_name(potential_location)
@@ -349,7 +350,8 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
                         location = normalize_location_name(remaining_text)
                     else:
                         # Split: text before parentheses is location, content is comment
-                        location = normalize_location_name(remaining_text[:paren_match.start()].strip())
+                        location = normalize_location_name(
+                            remaining_text[:paren_match.start()].strip())
                         comment = paren_content
                 else:
                     # No parentheses - entire remaining text is location
@@ -369,7 +371,8 @@ def parse_date_to_iso(date_str):
                     'juillet': 7, 'août': 8, 'septembre': 9, 'octobre': 10, 'novembre': 11, 'décembre': 12}
 
     # Try "26avril 1831" format (no space between day and month)
-    match = re.match(r'^(1er|\d{1,2})(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
+    match = re.match(
+        r'^(1er|\d{1,2})(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
     if match:
         day_str = match.group(1)
         day = 1 if day_str == '1er' else int(day_str)
@@ -393,7 +396,8 @@ def parse_date_to_iso(date_str):
             return f"{year:04d}-{month:02d}-{day:02d}"
 
     # Try "4 Jan 1952" format or "1er juillet 1788"
-    match = re.match(r'^(1er|\d{1,2})\s+(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
+    match = re.match(
+        r'^(1er|\d{1,2})\s+(\w+)\s+(\d{4})$', date_str, re.IGNORECASE)
     if match:
         day_str = match.group(1)
         day = 1 if day_str == '1er' else int(day_str)
@@ -405,7 +409,8 @@ def parse_date_to_iso(date_str):
             return f"{year:04d}-{month:02d}-{day:02d}"
 
     # Try "4 Jan1952" format (no space before year) or "1er juillet1788"
-    match = re.match(r'^(1er|\d{1,2})\s+(\w+)(\d{4})$', date_str, re.IGNORECASE)
+    match = re.match(
+        r'^(1er|\d{1,2})\s+(\w+)(\d{4})$', date_str, re.IGNORECASE)
     if match:
         day_str = match.group(1)
         day = 1 if day_str == '1er' else int(day_str)
@@ -537,7 +542,7 @@ def parse_individual_data(cell_text, source_file=None, family_tree=None):
 
     old_id = int(match.group(1))
     full_name = match.group(2).strip()
-    
+
     # Extract parenthetical comment from name if present
     name_comment = None
     name_match = re.search(r'\s*\(([^)]+)\)$', full_name)
@@ -592,7 +597,11 @@ def parse_document(filepath, base_path=None):
         base_path: Base folder path to extract family tree name from
     """
     individuals = []
-    source_filename = os.path.basename(filepath)
+    # Use relative path for source file reference
+    if base_path:
+        source_filename = os.path.relpath(filepath, base_path)
+    else:
+        source_filename = os.path.basename(filepath)
 
     # Extract family tree name (first subdirectory under base_path)
     family_tree = 'unknown'
@@ -623,34 +632,49 @@ def parse_document(filepath, base_path=None):
     return individuals
 
 
-def parse_documents(folder_path, ignore_files=None):
+def parse_documents(folder_path, ignore_patterns=None):
     """Parse all ODT documents in the folder and subfolders.
 
     Args:
         folder_path: Root directory to search for ODT files
-        ignore_files: Set of filenames to skip during parsing (e.g., {'file1.odt', 'file2.odt'})
+        ignore_patterns: Set of file/directory patterns to skip during parsing
+                        Patterns can be filenames, directory names, or relative paths
     """
     all_individuals = []
 
-    if ignore_files is None:
-        ignore_files = set()
+    if ignore_patterns is None:
+        ignore_patterns = set()
 
     if not os.path.exists(folder_path):
         print(f"Folder not found: {folder_path}")
         return all_individuals
 
     for root, dirs, files in os.walk(folder_path):
+        # Check if current directory should be ignored
+        rel_root = os.path.relpath(root, folder_path)
+        if rel_root != '.' and any(pattern in rel_root for pattern in ignore_patterns):
+            print(f"Skipping directory {rel_root} (ignored)")
+            dirs[:] = []  # Don't recurse into this directory
+            continue
+            
         for filename in sorted(files):
             if filename.endswith('.odt') and not filename.startswith('tableau vide'):
-                # Skip files in the ignore list
-                if filename in ignore_files:
-                    filepath = os.path.join(root, filename)
-                    print(
-                        f"Skipping {os.path.relpath(filepath, folder_path)} (ignored)")
+                # Check if file should be ignored
+                rel_path = os.path.relpath(os.path.join(root, filename), folder_path)
+                
+                # Check for exact filename match or path match
+                should_ignore = False
+                for pattern in ignore_patterns:
+                    if pattern in rel_path or pattern == filename:
+                        should_ignore = True
+                        break
+                        
+                if should_ignore:
+                    print(f"Skipping {rel_path} (ignored)")
                     continue
 
                 filepath = os.path.join(root, filename)
-                print(f"Parsing {os.path.relpath(filepath, folder_path)}...")
+                print(f"Parsing {rel_path}...")
                 individuals = parse_document(filepath, folder_path)
                 all_individuals.extend(individuals)
                 print(f"  Found {len(individuals)} individuals")
@@ -808,7 +832,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
 
             # Check if this tree instance already exists
             cursor.execute('''
-                SELECT individual_id, name_variant
+                SELECT individual_id, name_variant, source_file
                 FROM individual_tree_instances
                 WHERE family_tree = ? AND old_id = ?
             ''', (family_tree, old_id))
@@ -818,6 +842,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
                 # Tree instance exists - check if it's the same person
                 individual_id = existing_instance[0]
                 existing_variant = existing_instance[1]
+                existing_source_file = existing_instance[2]  # Get the existing source file
 
                 # Get the canonical name of the existing individual
                 cursor.execute('''
@@ -831,7 +856,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
                     print(
                         f"WARNING: Data conflict in '{family_tree}', old_id {old_id}:")
                     print(
-                        f"  Existing: {existing_canonical_name} (from earlier file)")
+                        f"  Existing: {existing_canonical_name} (from {existing_source_file})")
                     print(
                         f"  New: {individual['name']} (from {individual['source_file']})")
                     print(

@@ -13,20 +13,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def main():
     parser = argparse.ArgumentParser(
         description='Parse genealogy ODT files into SQLite database')
-    parser.add_argument('--ignore-files', type=str, default=None,
-                        help='Comma-separated list of filenames to ignore during parsing')
+    parser.add_argument('--ignore-files', action='append', default=[],
+                        help='Files or directories to ignore during parsing (can be repeated)')
     args = parser.parse_args()
 
     folder_path = os.environ.get('GENEALOGY_DATA_DIR', 'data/sources')
     db_name = 'data/genealogy.db'
 
-    # Parse ignore list from argument or environment variable
-    ignore_files = set()
-    if args.ignore_files:
-        ignore_files = set(f.strip() for f in args.ignore_files.split(','))
-    elif os.environ.get('GENEALOGY_IGNORE_FILES'):
-        ignore_files = set(f.strip() for f in os.environ.get(
-            'GENEALOGY_IGNORE_FILES').split(','))
+    # Parse ignore list from arguments or environment variable
+    ignore_patterns = set()
+    
+    # Add patterns from command line arguments
+    for pattern in args.ignore_files:
+        ignore_patterns.add(pattern.strip())
+    
+    # Add patterns from environment variable (comma-separated for backward compatibility)
+    if os.environ.get('GENEALOGY_IGNORE_FILES'):
+        env_patterns = os.environ.get('GENEALOGY_IGNORE_FILES').split(',')
+        for pattern in env_patterns:
+            ignore_patterns.add(pattern.strip())
 
     print("="*80)
     print("GENEALOGY PARSER")
@@ -37,10 +42,10 @@ def main():
     print("   ✓ Database created")
 
     print(f"\n2. Parsing documents from: {folder_path}")
-    if ignore_files:
-        print(f"   Ignoring files: {', '.join(sorted(ignore_files))}")
+    if ignore_patterns:
+        print(f"   Ignoring patterns: {', '.join(sorted(ignore_patterns))}")
     clear_date_warnings()  # Clear any previous warnings
-    individuals = parse_documents(folder_path, ignore_files=ignore_files)
+    individuals = parse_documents(folder_path, ignore_patterns=ignore_patterns)
     print(f"   ✓ Found {len(individuals)} individuals across all documents")
 
     print("\n3. Storing data in database...")

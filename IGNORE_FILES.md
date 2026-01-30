@@ -1,37 +1,46 @@
-# Ignoring Files During Parsing
+# Ignoring Files and Directories During Parsing
 
-The genealogy parser now supports ignoring specific ODT files during parsing. This is useful when you discover data conflicts between source files and need to exclude certain files while you resolve the inconsistencies.
+The genealogy parser supports ignoring specific ODT files and entire directories during parsing. This is useful when you discover data conflicts between source files and need to exclude certain files or directories while you resolve the inconsistencies.
 
 ## Usage
 
 ### Command-line Option
 
-Run the parser with the `--ignore-files` argument to specify filenames to skip:
+Use the `--ignore-files` argument to specify files or directories to skip. The option can be repeated for multiple patterns:
 
 ```bash
-python import_tools/run_parser.py --ignore-files "file1.odt,file2.odt"
-```
+# Ignore specific files
+python import_tools/run_parser.py --ignore-files "file1.odt" --ignore-files "file2.odt"
 
-Multiple files can be ignored by separating them with commas:
+# Ignore entire directories (recursively)
+python import_tools/run_parser.py --ignore-files "problematic_directory"
 
-```bash
-python import_tools/run_parser.py --ignore-files "arbre Nat.odt,conflicting_file.odt"
+# Mix files and directories
+python import_tools/run_parser.py --ignore-files "arbre Nat.odt" --ignore-files "conflicting_directory"
 ```
 
 ### Environment Variable
 
-Alternatively, set the `GENEALOGY_IGNORE_FILES` environment variable:
+Set the `GENEALOGY_IGNORE_FILES` environment variable with comma-separated patterns:
 
 ```bash
-export GENEALOGY_IGNORE_FILES="arbre Nat.odt,conflicting_file.odt"
+export GENEALOGY_IGNORE_FILES="arbre Nat.odt,conflicting_directory"
 python import_tools/run_parser.py
 ```
 
 Or set it inline:
 
 ```bash
-GENEALOGY_IGNORE_FILES="arbre Nat.odt" python import_tools/run_parser.py
+GENEALOGY_IGNORE_FILES="arbre Nat.odt,problematic_directory" python import_tools/run_parser.py
 ```
+
+## Pattern Matching
+
+Ignore patterns use substring matching against relative paths:
+
+- `"file.odt"` - matches any file with this exact name
+- `"directory_name"` - matches any directory containing this substring
+- `"Généalogie d'Eric/Tableaux"` - matches specific paths
 
 ## Example: Resolving old_id Conflicts
 
@@ -48,14 +57,22 @@ This will:
 - Use the `old_id` assignments from the remaining files
 - Display which files were ignored in the output
 
+## Example: Ignoring Directories
+
+If an entire directory contains problematic data, you can ignore it recursively:
+
+```bash
+python import_tools/run_parser.py --ignore-files "Généalogie d'Eric/Problematic Data"
+```
+
 ## Identifying Conflicts
 
 The parser reports data conflicts in the output:
 
 ```
 WARNING: Data conflict in 'Généalogie d'Eric', old_id 4:
-  Existing: MANOURY André Eugène Léon (from earlier file)
-  New: MOUNTAIN William (from arbre paternel Eric.odt)
+  Existing: MANOURY André Eugène Léon (from Généalogie d'Eric/Tableaux/17bis Quentin Victoria.odt)
+  New: MOUNTAIN William (from Généalogie d'Eric/Actes/arbre paternel Eric.odt)
   Keeping existing entry. Check source files for inconsistencies.
 ```
 
