@@ -25,13 +25,14 @@ def create_database(db_name='data/genealogy.db'):
     # Drop existing tables to start fresh
     cursor.execute('DROP TABLE IF EXISTS relationships')
     cursor.execute('DROP TABLE IF EXISTS individual_sources')
+    cursor.execute('DROP TABLE IF EXISTS individual_tree_instances')
     cursor.execute('DROP TABLE IF EXISTS individuals')
 
+    # Canonical individuals table - one entry per unique person
     cursor.execute('''
     CREATE TABLE individuals (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        old_id INTEGER UNIQUE,
-        name TEXT NOT NULL,
+        canonical_name TEXT NOT NULL,
         date_of_birth TEXT,
         birth_location TEXT,
         birth_comment TEXT,
@@ -42,6 +43,20 @@ def create_database(db_name='data/genealogy.db'):
         marriage_date TEXT,
         marriage_location TEXT,
         marriage_comment TEXT
+    )
+    ''')
+
+    # Track each appearance of an individual in different family trees
+    cursor.execute('''
+    CREATE TABLE individual_tree_instances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        individual_id INTEGER NOT NULL,
+        family_tree TEXT NOT NULL,
+        old_id INTEGER NOT NULL,
+        name_variant TEXT,
+        source_file TEXT,
+        UNIQUE(family_tree, old_id),
+        FOREIGN KEY (individual_id) REFERENCES individuals(id)
     )
     ''')
 
@@ -56,15 +71,18 @@ def create_database(db_name='data/genealogy.db'):
     )
     ''')
 
+    # Relationships reference the canonical individual_id
+    # and are scoped to specific tree contexts via tree_instances
     cursor.execute('''
     CREATE TABLE relationships (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         parent_id INTEGER,
         child_id INTEGER,
         relationship_type TEXT,
+        family_tree TEXT NOT NULL,
         FOREIGN KEY (parent_id) REFERENCES individuals(id),
         FOREIGN KEY (child_id) REFERENCES individuals(id),
-        UNIQUE(parent_id, child_id, relationship_type)
+        UNIQUE(parent_id, child_id, relationship_type, family_tree)
     )
     ''')
     conn.commit()
@@ -260,6 +278,14 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
     comment_match = re.search(r'\(([^)]+)\)', remaining_text)
     if comment_match:
         comment = comment_match.group(1).strip()
+    else:
+        # If no parentheses, check if remaining text is just a Sosa ID + name reference
+        # These should not be stored as comments (e.g., "6 MOUNTAIN William")
+        if remaining_text and not date_iso:
+            # Pattern: number followed by name (spouse reference in marriage field)
+            if not re.match(r'^\d+\s+[A-Z]', remaining_text):
+                # Not a Sosa reference, treat as comment
+                comment = remaining_text
 
     return {'date': date_iso, 'location': location, 'comment': comment}
 
@@ -346,7 +372,7 @@ def parse_french_revolutionary_date(fr_date_str):
     return f"{greg_year:04d}-{greg_month:02d}-{greg_day:02d}"
 
 
-def parse_individual_data(cell_text, source_file=None):
+def parse_individual_data(cell_text, source_file=None, family_tree=None):
     """Parse individual data from cell text.
 
     Format examples (anonymized):
@@ -367,6 +393,7 @@ def parse_individual_data(cell_text, source_file=None):
     Args:
         cell_text: Text content from the table cell
         source_file: Source ODT filename for warning messages
+        family_tree: Family tree identifier (subdirectory name)
     """
     if not cell_text or not cell_text.strip():
         return None
@@ -419,6 +446,7 @@ def parse_individual_data(cell_text, source_file=None):
 
     return {
         'old_id': old_id,
+        'family_tree': family_tree,
         'name': name,
         'date_of_birth': birth_details['date'],
         'birth_location': birth_details['location'],
@@ -433,10 +461,23 @@ def parse_individual_data(cell_text, source_file=None):
     }
 
 
-def parse_document(filepath):
-    """Parse a single ODT document and extract all individuals."""
+def parse_document(filepath, base_path=None):
+    """Parse a single ODT document and extract all individuals.
+
+    Args:
+        filepath: Full path to the ODT file
+        base_path: Base folder path to extract family tree name from
+    """
     individuals = []
     source_filename = os.path.basename(filepath)
+
+    # Extract family tree name (first subdirectory under base_path)
+    family_tree = 'unknown'
+    if base_path:
+        rel_path = os.path.relpath(filepath, base_path)
+        parts = rel_path.split(os.sep)
+        if len(parts) > 0:
+            family_tree = parts[0]
 
     try:
         doc = load(filepath)
@@ -449,7 +490,7 @@ def parse_document(filepath):
                 for cell in cells:
                     cell_text = get_cell_text(cell)
                     individual = parse_individual_data(
-                        cell_text, source_filename)
+                        cell_text, source_filename, family_tree)
                     if individual:
                         individual['source_file'] = source_filename
                         individuals.append(individual)
@@ -472,54 +513,68 @@ def parse_documents(folder_path):
             if filename.endswith('.odt') and not filename.startswith('tableau vide'):
                 filepath = os.path.join(root, filename)
                 print(f"Parsing {os.path.relpath(filepath, folder_path)}...")
-                individuals = parse_document(filepath)
+                individuals = parse_document(filepath, folder_path)
                 all_individuals.extend(individuals)
                 print(f"  Found {len(individuals)} individuals")
 
     return all_individuals
 
 
-def infer_relationships(individuals_dict):
+def infer_relationships(individuals_dict, tree_instance_map):
     """Infer parent-child relationships based on old_id numbering.
 
     In genealogy numbering:
     - Each person has an ID
     - Their parents have IDs that are 2*ID and 2*ID+1
     - Even IDs are typically male, odd IDs are female
+    
+    Relationships are scoped to family trees and use canonical individual_ids.
+    Within a tree, (family_tree, old_id) uniquely identifies an individual.
+    
+    Args:
+        individuals_dict: dict mapping (family_tree, old_id) -> individual data
+        tree_instance_map: dict mapping (family_tree, old_id) -> canonical individual_id
     """
     relationships = []
+    processed_children = set()  # Track (family_tree, child_id) to avoid duplicates
 
-    # Create a lookup by old_id
-    id_lookup = {}
-    for db_id, individual in individuals_dict.items():
-        old_id = individual['old_id']
-        if old_id not in id_lookup:
-            id_lookup[old_id] = []
-        id_lookup[old_id].append(db_id)
+    # Find parent-child relationships within each tree
+    for tree_key, individual_data in individuals_dict.items():
+        old_id = individual_data['old_id']
+        family_tree = individual_data['family_tree']
+        child_individual_id = individual_data['individual_id']
+        
+        # Skip if we've already processed relationships for this child in this tree
+        child_key = (family_tree, child_individual_id)
+        if child_key in processed_children:
+            continue
+        
+        processed_children.add(child_key)
 
-    # Find parent-child relationships
-    for db_id, individual in individuals_dict.items():
-        old_id = individual['old_id']
-
-        # Parents would have IDs of 2*old_id and 2*old_id+1
+        # Parents would have IDs of 2*old_id and 2*old_id+1 in the SAME family tree
         father_id = 2 * old_id
         mother_id = 2 * old_id + 1
 
-        if father_id in id_lookup:
-            for parent_db_id in id_lookup[father_id]:
-                relationships.append({
-                    'parent_id': parent_db_id,
-                    'child_id': db_id,
-                    'relationship_type': 'father'
-                })
+        father_key = (family_tree, father_id)
+        mother_key = (family_tree, mother_id)
 
-        if mother_id in id_lookup:
-            for parent_db_id in id_lookup[mother_id]:
-                relationships.append({
-                    'parent_id': parent_db_id,
-                    'child_id': db_id,
-                    'relationship_type': 'mother'
-                })
+        if father_key in tree_instance_map:
+            parent_individual_id = tree_instance_map[father_key]
+            relationships.append({
+                'parent_id': parent_individual_id,
+                'child_id': child_individual_id,
+                'relationship_type': 'father',
+                'family_tree': family_tree
+            })
+
+        if mother_key in tree_instance_map:
+            parent_individual_id = tree_instance_map[mother_key]
+            relationships.append({
+                'parent_id': parent_individual_id,
+                'child_id': child_individual_id,
+                'relationship_type': 'mother',
+                'family_tree': family_tree
+            })
 
     return relationships
 
@@ -535,123 +590,273 @@ def clear_date_warnings():
     _date_warnings = []
 
 
+def normalize_name(name):
+    """Normalize a name for matching across trees."""
+    import re
+    # Remove extra whitespace, convert to uppercase for comparison
+    normalized = ' '.join(name.upper().split())
+    # Remove common variations
+    normalized = re.sub(r'\s*\([^)]*\)', '', normalized)  # Remove parentheses content
+    return normalized
+
+
+def find_matching_individual(cursor, individual):
+    """Find existing individual that matches by name and birth date.
+    
+    Matching criteria:
+    1. Exact normalized name match
+    2. Birth date must match (if both have birth dates)
+    3. If either is missing birth date, no match (to avoid false positives)
+    """
+    normalized_name = normalize_name(individual['name'])
+    
+    # Require birth date for matching across trees
+    if not individual['date_of_birth']:
+        return None
+    
+    # First try exact name match
+    cursor.execute('''
+        SELECT id, canonical_name, date_of_birth, date_of_death
+        FROM individuals
+        WHERE UPPER(REPLACE(canonical_name, '  ', ' ')) = ?
+    ''', (normalized_name,))
+    
+    candidates = cursor.fetchall()
+    
+    for candidate in candidates:
+        candidate_id, candidate_name, candidate_dob, candidate_dod = candidate
+        
+        # Require birth date match
+        if not candidate_dob:
+            continue
+            
+        if individual['date_of_birth'] != candidate_dob:
+            continue
+        
+        # Check death date compatibility if both present
+        if individual['date_of_death'] and candidate_dod:
+            if individual['date_of_death'] != candidate_dod:
+                continue
+        
+        return candidate_id
+    
+    return None
+
+
 def store_data(individuals, db_name='data/genealogy.db'):
     """Store parsed individuals and inferred relationships in the database.
-
-    Merges individuals by old_id, preferring longer/more complete names and
-    accumulating data from all sources.
+    
+    Creates canonical individuals and tracks their appearances in different trees.
+    Matches individuals across trees by normalized name and compatible dates.
     """
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
 
-    # Store individuals and keep track of their database IDs
+    # Map (family_tree, old_id) -> canonical individual_id
+    tree_instance_map = {}
+    
+    # Track individuals_dict for relationship inference: individual_id -> individual data
     individuals_dict = {}
+    
+    # Track merged individuals (appearing in multiple trees)
+    merged_individuals = []
+
     for individual in individuals:
         try:
-            # Check if this old_id already exists
-            cursor.execute('''SELECT id, name, date_of_birth, birth_location, birth_comment,
-                             date_of_death, death_location, death_comment, profession,
-                             marriage_date, marriage_location, marriage_comment
-                             FROM individuals WHERE old_id = ?''',
-                           (individual['old_id'],))
-            existing = cursor.fetchone()
-
-            if existing:
-                # Person exists - merge data
-                db_id = existing[0]
-                existing_name = existing[1]
-
-                # Prefer the longer/more complete name
-                new_name = individual['name']
-                if len(new_name) > len(existing_name):
-                    cursor.execute(
-                        'UPDATE individuals SET name = ? WHERE id = ?', (new_name, db_id))
-
-                # Update fields with non-null/non-empty values if current value is null or empty
-                if individual['date_of_birth']:
-                    cursor.execute('UPDATE individuals SET date_of_birth = ? WHERE id = ? AND (date_of_birth IS NULL OR date_of_birth = "")',
-                                   (individual['date_of_birth'], db_id))
-                if individual['birth_location']:
-                    cursor.execute('UPDATE individuals SET birth_location = ? WHERE id = ? AND (birth_location IS NULL OR birth_location = "")',
-                                   (individual['birth_location'], db_id))
-                if individual['birth_comment']:
-                    cursor.execute('UPDATE individuals SET birth_comment = ? WHERE id = ? AND (birth_comment IS NULL OR birth_comment = "")',
-                                   (individual['birth_comment'], db_id))
-                if individual['date_of_death']:
-                    cursor.execute('UPDATE individuals SET date_of_death = ? WHERE id = ? AND (date_of_death IS NULL OR date_of_death = "")',
-                                   (individual['date_of_death'], db_id))
-                if individual['death_location']:
-                    cursor.execute('UPDATE individuals SET death_location = ? WHERE id = ? AND (death_location IS NULL OR death_location = "")',
-                                   (individual['death_location'], db_id))
-                if individual['death_comment']:
-                    cursor.execute('UPDATE individuals SET death_comment = ? WHERE id = ? AND (death_comment IS NULL OR death_comment = "")',
-                                   (individual['death_comment'], db_id))
-                if individual['profession']:
-                    cursor.execute('UPDATE individuals SET profession = ? WHERE id = ? AND (profession IS NULL OR profession = "")',
-                                   (individual['profession'], db_id))
-                if individual['marriage_date']:
-                    cursor.execute('UPDATE individuals SET marriage_date = ? WHERE id = ? AND (marriage_date IS NULL OR marriage_date = "")',
-                                   (individual['marriage_date'], db_id))
-                if individual['marriage_location']:
-                    cursor.execute('UPDATE individuals SET marriage_location = ? WHERE id = ? AND (marriage_location IS NULL OR marriage_location = "")',
-                                   (individual['marriage_location'], db_id))
-                if individual['marriage_comment']:
-                    cursor.execute('UPDATE individuals SET marriage_comment = ? WHERE id = ? AND (marriage_comment IS NULL OR marriage_comment = "")',
-                                   (individual['marriage_comment'], db_id))
-            else:
-                # New person - insert
-                cursor.execute('''
-                INSERT INTO individuals 
-                (old_id, name, date_of_birth, birth_location, birth_comment,
-                 date_of_death, death_location, death_comment, profession,
-                 marriage_date, marriage_location, marriage_comment)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    individual['old_id'],
-                    individual['name'],
-                    individual['date_of_birth'],
-                    individual['birth_location'],
-                    individual['birth_comment'],
-                    individual['date_of_death'],
-                    individual['death_location'],
-                    individual['death_comment'],
-                    individual['profession'],
-                    individual['marriage_date'],
-                    individual['marriage_location'],
-                    individual['marriage_comment']
-                ))
-                db_id = cursor.lastrowid
-
-            # Record the source file
+            family_tree = individual['family_tree']
+            old_id = individual['old_id']
+            tree_key = (family_tree, old_id)
+            
+            # Check if this tree instance already exists
             cursor.execute('''
-            INSERT OR IGNORE INTO individual_sources (individual_id, source_file)
-            VALUES (?, ?)
-            ''', (db_id, individual['source_file']))
-
-            individuals_dict[db_id] = individual
+                SELECT individual_id, name_variant
+                FROM individual_tree_instances
+                WHERE family_tree = ? AND old_id = ?
+            ''', (family_tree, old_id))
+            existing_instance = cursor.fetchone()
+            
+            if existing_instance:
+                # Tree instance exists - check if it's the same person
+                individual_id = existing_instance[0]
+                existing_variant = existing_instance[1]
+                
+                # Get the canonical name of the existing individual
+                cursor.execute('''
+                    SELECT canonical_name FROM individuals WHERE id = ?
+                ''', (individual_id,))
+                existing_canonical_name = cursor.fetchone()[0]
+                
+                # Check if names match (normalize both for comparison)
+                if normalize_name(individual['name']) != normalize_name(existing_canonical_name):
+                    # CONFLICT: Same (family_tree, old_id) but different people!
+                    print(f"WARNING: Data conflict in '{family_tree}', old_id {old_id}:")
+                    print(f"  Existing: {existing_canonical_name} (from earlier file)")
+                    print(f"  New: {individual['name']} (from {individual['source_file']})")
+                    print(f"  Keeping existing entry. Check source files for inconsistencies.")
+                    continue  # Skip this conflicting entry
+                
+                # Same person - prefer longer/more complete name variant
+                if len(individual['name']) > len(existing_variant or ''):
+                    cursor.execute('''
+                        UPDATE individual_tree_instances
+                        SET name_variant = ?
+                        WHERE family_tree = ? AND old_id = ?
+                    ''', (individual['name'], family_tree, old_id))
+                
+                # Merge data into canonical individual
+                cursor.execute('''
+                    SELECT canonical_name, date_of_birth, birth_location, birth_comment,
+                           date_of_death, death_location, death_comment, profession,
+                           marriage_date, marriage_location, marriage_comment
+                    FROM individuals WHERE id = ?
+                ''', (individual_id,))
+                existing_data = cursor.fetchone()
+                
+                if existing_data:
+                    updates = []
+                    params = []
+                    
+                    # Update only empty fields
+                    if individual['date_of_birth'] and not existing_data[1]:
+                        updates.append('date_of_birth = ?')
+                        params.append(individual['date_of_birth'])
+                    if individual['birth_location'] and not existing_data[2]:
+                        updates.append('birth_location = ?')
+                        params.append(individual['birth_location'])
+                    if individual['birth_comment'] and not existing_data[3]:
+                        updates.append('birth_comment = ?')
+                        params.append(individual['birth_comment'])
+                    if individual['date_of_death'] and not existing_data[4]:
+                        updates.append('date_of_death = ?')
+                        params.append(individual['date_of_death'])
+                    if individual['death_location'] and not existing_data[5]:
+                        updates.append('death_location = ?')
+                        params.append(individual['death_location'])
+                    if individual['death_comment'] and not existing_data[6]:
+                        updates.append('death_comment = ?')
+                        params.append(individual['death_comment'])
+                    if individual['profession'] and not existing_data[7]:
+                        updates.append('profession = ?')
+                        params.append(individual['profession'])
+                    if individual['marriage_date'] and not existing_data[8]:
+                        updates.append('marriage_date = ?')
+                        params.append(individual['marriage_date'])
+                    if individual['marriage_location'] and not existing_data[9]:
+                        updates.append('marriage_location = ?')
+                        params.append(individual['marriage_location'])
+                    if individual['marriage_comment'] and not existing_data[10]:
+                        updates.append('marriage_comment = ?')
+                        params.append(individual['marriage_comment'])
+                    
+                    if updates:
+                        params.append(individual_id)
+                        cursor.execute(f'''
+                            UPDATE individuals
+                            SET {', '.join(updates)}
+                            WHERE id = ?
+                        ''', params)
+                
+            else:
+                # New tree instance - try to find matching canonical individual
+                individual_id = find_matching_individual(cursor, individual)
+                
+                if individual_id is None:
+                    # No match found - create new canonical individual
+                    cursor.execute('''
+                        INSERT INTO individuals
+                        (canonical_name, date_of_birth, birth_location, birth_comment,
+                         date_of_death, death_location, death_comment, profession,
+                         marriage_date, marriage_location, marriage_comment)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        individual['name'],
+                        individual['date_of_birth'],
+                        individual['birth_location'],
+                        individual['birth_comment'],
+                        individual['date_of_death'],
+                        individual['death_location'],
+                        individual['death_comment'],
+                        individual['profession'],
+                        individual['marriage_date'],
+                        individual['marriage_location'],
+                        individual['marriage_comment']
+                    ))
+                    individual_id = cursor.lastrowid
+                else:
+                    # Found matching individual - merge data and track it
+                    merged_individuals.append({
+                        'individual_id': individual_id,
+                        'name': individual['name'],
+                        'family_tree': family_tree,
+                        'old_id': old_id
+                    })
+                    
+                    cursor.execute('''
+                        SELECT canonical_name FROM individuals WHERE id = ?
+                    ''', (individual_id,))
+                    existing_name = cursor.fetchone()[0]
+                    
+                    # Prefer longer name
+                    if len(individual['name']) > len(existing_name):
+                        cursor.execute('''
+                            UPDATE individuals SET canonical_name = ? WHERE id = ?
+                        ''', (individual['name'], individual_id))
+                
+                # Create tree instance
+                cursor.execute('''
+                    INSERT INTO individual_tree_instances
+                    (individual_id, family_tree, old_id, name_variant, source_file)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (individual_id, family_tree, old_id, individual['name'], individual['source_file']))
+            
+            # Record the source file for canonical individual
+            cursor.execute('''
+                INSERT OR IGNORE INTO individual_sources (individual_id, source_file)
+                VALUES (?, ?)
+            ''', (individual_id, individual['source_file']))
+            
+            # Track mapping for relationship inference
+            tree_instance_map[tree_key] = individual_id
+            individuals_dict[tree_key] = {
+                'individual_id': individual_id,
+                'old_id': old_id,
+                'family_tree': family_tree,
+                **individual
+            }
 
         except Exception as e:
-            print(f"Error inserting individual {individual.get('name')}: {e}")
+            print(f"Error processing individual {individual.get('name')}: {e}")
+            import traceback
+            traceback.print_exc()
 
     conn.commit()
 
     # Infer and store relationships
-    relationships = infer_relationships(individuals_dict)
+    relationships = infer_relationships(individuals_dict, tree_instance_map)
     print(f"\nInferred {len(relationships)} relationships")
 
     for rel in relationships:
         try:
             cursor.execute('''
-            INSERT OR IGNORE INTO relationships (parent_id, child_id, relationship_type)
-            VALUES (?, ?, ?)
-            ''', (rel['parent_id'], rel['child_id'], rel['relationship_type']))
+                INSERT OR IGNORE INTO relationships (parent_id, child_id, relationship_type, family_tree)
+                VALUES (?, ?, ?, ?)
+            ''', (rel['parent_id'], rel['child_id'], rel['relationship_type'], rel['family_tree']))
         except Exception as e:
             print(f"Error inserting relationship: {e}")
 
     conn.commit()
+    
+    # Get count of unique canonical individuals
+    cursor.execute('SELECT COUNT(*) FROM individuals')
+    num_individuals = cursor.fetchone()[0]
+    
+    # Get count of tree instances
+    cursor.execute('SELECT COUNT(*) FROM individual_tree_instances')
+    num_instances = cursor.fetchone()[0]
+    
     conn.close()
 
-    return len(individuals_dict), len(relationships)
+    return num_individuals, num_instances, len(relationships), merged_individuals
 
 
 if __name__ == "__main__":

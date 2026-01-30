@@ -13,7 +13,7 @@ def find_individual(conn, search_term):
     try:
         old_id = int(search_term)
         cursor.execute("""
-            SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+            SELECT id, old_id, family_tree, name, date_of_birth, birth_location, birth_comment,
                    date_of_death, death_location, death_comment, profession,
                    marriage_date, marriage_location, marriage_comment
             FROM individuals
@@ -22,7 +22,7 @@ def find_individual(conn, search_term):
     except ValueError:
         # Search by name
         cursor.execute("""
-            SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+            SELECT id, old_id, family_tree, name, date_of_birth, birth_location, birth_comment,
                    date_of_death, death_location, death_comment, profession,
                    marriage_date, marriage_location, marriage_comment
             FROM individuals
@@ -73,12 +73,13 @@ def get_sources(conn, individual_id):
 
 def display_individual(conn, individual):
     """Display detailed information about an individual."""
-    db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, profession, marriage, marriage_loc, marriage_comment = individual
+    db_id, old_id, family_tree, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, profession, marriage, marriage_loc, marriage_comment = individual
 
     print(f"\n{'='*80}")
     print(f"{name}")
     print(f"{'='*80}")
     print(f"ID: {old_id} (Database ID: {db_id})")
+    print(f"Family Tree: {family_tree}")
     if dob or birth_loc or birth_comment:
         birth_info = "Born:"
         if dob:
@@ -165,10 +166,11 @@ def main():
             display_individual(conn, results[0])
         else:
             print(f"\nFound {len(results)} matching individuals:")
-            print("-" * 80)
+            print("-" * 100)
             for individual in results:
-                print(f"{individual[1]:4d}  {individual[2]}")
-            print("-" * 80)
+                # individual: id, old_id, family_tree, name, ...
+                print(f"{individual[1]:4d}  [{individual[2]:<30}]  {individual[3]}")
+            print("-" * 100)
             print("\nUse the ID number to see details for a specific person.")
     finally:
         conn.close()

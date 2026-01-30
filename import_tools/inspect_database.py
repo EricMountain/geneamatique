@@ -17,37 +17,53 @@ def inspect_database(db_name='data/genealogy.db'):
     total_individuals = cursor.fetchone()[0]
     print(f"\nTotal individuals: {total_individuals}")
 
+    # Count family trees
+    cursor.execute("SELECT COUNT(DISTINCT family_tree) FROM individuals")
+    total_trees = cursor.fetchone()[0]
+    print(f"Total family trees: {total_trees}")
+    
+    # Show individuals per family tree
+    cursor.execute("""
+        SELECT family_tree, COUNT(*) 
+        FROM individuals 
+        GROUP BY family_tree
+        ORDER BY COUNT(*) DESC
+    """)
+    print("\nIndividuals per family tree:")
+    for row in cursor.fetchall():
+        print(f"  {row[0]}: {row[1]}")
+
     # Count relationships
     cursor.execute("SELECT COUNT(*) FROM relationships")
     total_relationships = cursor.fetchone()[0]
-    print(f"Total relationships: {total_relationships}")
+    print(f"\nTotal relationships: {total_relationships}")
 
     # Show sample individuals
     print("\n" + "-"*80)
     print("SAMPLE INDIVIDUALS (first 10):")
     print("-"*80)
     cursor.execute("""
-        SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
+        SELECT id, old_id, family_tree, name, date_of_birth, birth_location, birth_comment,
                date_of_death, death_location, death_comment, profession 
         FROM individuals 
         LIMIT 10
     """)
     for row in cursor.fetchall():
-        print(f"\nID: {row[0]} (old_id: {row[1]})")
-        print(f"  Name: {row[2]}")
-        birth_info = row[3] or 'Unknown'
-        if row[4]:  # birth_location
-            birth_info += f" à {row[4]}"
-        if row[5]:  # birth_comment
-            birth_info += f" ({row[5]})"
+        print(f"\nID: {row[0]} (old_id: {row[1]}, tree: {row[2]})")
+        print(f"  Name: {row[3]}")
+        birth_info = row[4] or 'Unknown'
+        if row[5]:  # birth_location
+            birth_info += f" à {row[5]}"
+        if row[6]:  # birth_comment
+            birth_info += f" ({row[6]})"
         print(f"  Born: {birth_info}")
-        death_info = row[6] or 'Unknown'
-        if row[7]:  # death_location
-            death_info += f" à {row[7]}"
-        if row[8]:  # death_comment
-            death_info += f" ({row[8]})"
+        death_info = row[7] or 'Unknown'
+        if row[8]:  # death_location
+            death_info += f" à {row[8]}"
+        if row[9]:  # death_comment
+            death_info += f" ({row[9]})"
         print(f"  Died: {death_info}")
-        print(f"  Profession: {row[9] or 'Unknown'}")
+        print(f"  Profession: {row[10] or 'Unknown'}")
 
         # Get source files
         cursor.execute(

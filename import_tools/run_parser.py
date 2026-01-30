@@ -27,16 +27,36 @@ def main():
     print(f"   ✓ Found {len(individuals)} individuals across all documents")
 
     print("\n3. Storing data in database...")
-    num_individuals, num_relationships = store_data(individuals, db_name)
+    num_individuals, num_instances, num_relationships, merged_individuals = store_data(individuals, db_name)
     print(f"   ✓ Stored {num_individuals} unique individuals")
+    print(f"   ✓ Created {num_instances} tree instance records")
     print(f"   ✓ Inferred {num_relationships} parent-child relationships")
 
     print("\n" + "="*80)
     print("COMPLETE!")
     print("="*80)
     print(f"Database: {db_name}")
-    print(f"Total individuals: {num_individuals}")
+    print(f"Canonical individuals: {num_individuals}")
+    print(f"Tree instances: {num_instances}")
     print(f"Total relationships: {num_relationships}")
+    
+    # Display merged individuals
+    if merged_individuals:
+        # Group by individual_id to show all trees per person
+        from collections import defaultdict
+        merged_by_person = defaultdict(list)
+        for merge in merged_individuals:
+            merged_by_person[merge['individual_id']].append(merge)
+        
+        print(f"\n{'='*80}")
+        print(f"CROSS-TREE MATCHES: {len(merged_by_person)} individual(s) found in multiple trees")
+        print(f"{'='*80}")
+        
+        for individual_id, merges in sorted(merged_by_person.items()):
+            name = merges[0]['name']
+            trees = sorted(set(m['family_tree'] for m in merges))
+            print(f"\n  {name}")
+            print(f"    Found in {len(trees) + 1} tree(s): {', '.join(trees)}")
 
     # Display accumulated date warnings
     warnings_list = get_date_warnings()

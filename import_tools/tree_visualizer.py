@@ -29,77 +29,113 @@ def colorize(text, color):
     return f"{color}{text}{Colors.RESET}"
 
 
-def find_individual(conn, search_term):
-    """Find an individual by name or ID."""
+def find_individual(conn, search_term, family_tree=None):
+    """Find an individual by name or old_id.
+    
+    Returns list of tuples: (individual_id, family_tree, old_id, canonical_name, ...)
+    Deduplicates multiple instances with same (individual_id, family_tree, old_id) from different source files.
+    """
     cursor = conn.cursor()
 
-    # Try as ID first
+    # Try as old_id first
     try:
         old_id = int(search_term)
-        cursor.execute("""
-            SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
-                   date_of_death, death_location, death_comment,
-                   marriage_date, marriage_location, marriage_comment
-            FROM individuals
-            WHERE old_id = ?
-        """, (old_id,))
+        query = """
+            SELECT DISTINCT i.id, iti.family_tree, iti.old_id, i.canonical_name, 
+                   i.date_of_birth, i.birth_location, i.birth_comment,
+                   i.date_of_death, i.death_location, i.death_comment,
+                   i.marriage_date, i.marriage_location, i.marriage_comment
+            FROM individuals i
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE iti.old_id = ?
+        """
+        params = [old_id]
+        if family_tree:
+            query += " AND iti.family_tree = ?"
+            params.append(family_tree)
+        query += " ORDER BY iti.family_tree, iti.old_id"
+        cursor.execute(query, params)
     except ValueError:
         # Search by name
-        cursor.execute("""
-            SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
-                   date_of_death, death_location, death_comment,
-                   marriage_date, marriage_location, marriage_comment
-            FROM individuals
-            WHERE name LIKE ?
-        """, (f"%{search_term}%",))
+        query = """
+            SELECT DISTINCT i.id, iti.family_tree, iti.old_id, i.canonical_name,
+                   i.date_of_birth, i.birth_location, i.birth_comment,
+                   i.date_of_death, i.death_location, i.death_comment,
+                   i.marriage_date, i.marriage_location, i.marriage_comment
+            FROM individuals i
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE i.canonical_name LIKE ?
+        """
+        params = [f"%{search_term}%"]
+        if family_tree:
+            query += " AND iti.family_tree = ?"
+            params.append(family_tree)
+        query += " ORDER BY iti.family_tree, iti.old_id"
+        cursor.execute(query, params)
 
     results = cursor.fetchall()
     return results
 
 
-def get_parents(conn, individual_id):
-    """Get parents of an individual."""
+def get_parents(conn, individual_id, family_tree):
+    """Get parents of an individual within a specific family tree.
+    
+    When a parent appears in multiple source files with the same (family_tree, old_id),
+    we use the instance with the lowest old_id (or first alphabetically by source if same old_id).
+    """
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT i.id, i.old_id, i.name, i.date_of_birth, i.birth_location, i.birth_comment,
+        SELECT i.id, iti.old_id, i.canonical_name, 
+               i.date_of_birth, i.birth_location, i.birth_comment,
                i.date_of_death, i.death_location, i.death_comment,
                i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type
         FROM relationships r
         JOIN individuals i ON r.parent_id = i.id
-        WHERE r.child_id = ?
+        JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ?
+            AND iti.old_id = (
+                SELECT MIN(iti2.old_id)
+                FROM individual_tree_instances iti2
+                WHERE iti2.individual_id = i.id AND iti2.family_tree = ?
+            )
+        WHERE r.child_id = ? AND r.family_tree = ?
+        GROUP BY i.id, r.relationship_type
         ORDER BY r.relationship_type DESC
-    """, (individual_id,))
+    """, (family_tree, family_tree, individual_id, family_tree))
     return cursor.fetchall()
 
 
-def get_children(conn, individual_id):
-    """Get children of an individual."""
+def get_children(conn, individual_id, family_tree):
+    """Get children of an individual within a specific family tree."""
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT DISTINCT i.id, i.old_id, i.name, i.date_of_birth, i.birth_location, i.birth_comment,
+        SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
+               i.date_of_birth, i.birth_location, i.birth_comment,
                i.date_of_death, i.death_location, i.death_comment,
                i.marriage_date, i.marriage_location, i.marriage_comment
         FROM relationships r
         JOIN individuals i ON r.child_id = i.id
-        WHERE r.parent_id = ?
-        ORDER BY i.old_id
-    """, (individual_id,))
+        JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ?
+        WHERE r.parent_id = ? AND r.family_tree = ?
+        ORDER BY iti.old_id
+    """, (family_tree, individual_id, family_tree))
     return cursor.fetchall()
 
 
-def get_spouses(conn, individual_id):
-    """Get spouses of an individual based on shared children."""
+def get_spouses(conn, individual_id, family_tree):
+    """Get spouses of an individual based on shared children within a tree."""
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT DISTINCT i.id, i.old_id, i.name, i.date_of_birth, i.birth_location, i.birth_comment,
+        SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
+               i.date_of_birth, i.birth_location, i.birth_comment,
                i.date_of_death, i.death_location, i.death_comment,
                i.marriage_date, i.marriage_location, i.marriage_comment
         FROM relationships r
-        JOIN relationships r2 ON r.child_id = r2.child_id
+        JOIN relationships r2 ON r.child_id = r2.child_id AND r.family_tree = r2.family_tree
         JOIN individuals i ON r2.parent_id = i.id
-        WHERE r.parent_id = ? AND r2.parent_id != r.parent_id
-        ORDER BY i.old_id
-    """, (individual_id,))
+        JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ?
+        WHERE r.parent_id = ? AND r2.parent_id != r.parent_id AND r.family_tree = ?
+        ORDER BY iti.old_id
+    """, (family_tree, individual_id, family_tree))
     return cursor.fetchall()
 
 
@@ -177,7 +213,7 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
     return info
 
 
-def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visited=None, sosa_number=1, depth=0):
+def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_last=True, visited=None, sosa_number=1, depth=0):
     """
     Draw an ASCII tree of ancestors working backwards from the individual.
 
@@ -202,12 +238,14 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
-               date_of_death, death_location, death_comment,
-               marriage_date, marriage_location, marriage_comment
-        FROM individuals
-        WHERE id = ?
-    """, (individual_id,))
+        SELECT i.id, iti.old_id, i.canonical_name, 
+               i.date_of_birth, i.birth_location, i.birth_comment,
+               i.date_of_death, i.death_location, i.death_comment,
+               i.marriage_date, i.marriage_location, i.marriage_comment
+        FROM individuals i
+        JOIN individual_tree_instances iti ON i.id = iti.individual_id
+        WHERE i.id = ? AND iti.family_tree = ?
+    """, (individual_id, family_tree))
 
     result = cursor.fetchone()
     if not result:
@@ -243,7 +281,7 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
             active_bars.add(connector_col)
 
     # Get parents
-    parents = get_parents(conn, individual_id)
+    parents = get_parents(conn, individual_id, family_tree)
 
     if parents:
         # Draw each parent with Sosa-Stradonitz numbering
@@ -270,11 +308,11 @@ def draw_ancestor_tree(conn, individual_id, active_bars=None, is_last=True, visi
             parent_id = parent[0]
             is_last_parent = (idx == len(parents_to_draw) - 1)
 
-            draw_ancestor_tree(conn, parent_id, active_bars.copy(),
+            draw_ancestor_tree(conn, parent_id, family_tree, active_bars.copy(),
                                is_last_parent, visited, parent_sosa, depth + 1)
 
 
-def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=None, depth=0, max_depth=10, generation_number=1):
+def draw_descendant_tree(conn, individual_id, family_tree, prefix="", is_last=True, visited=None, depth=0, max_depth=10, generation_number=1):
     """
     Draw an ASCII tree of descendants working forward from the individual.
 
@@ -292,12 +330,14 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, old_id, name, date_of_birth, birth_location, birth_comment,
-               date_of_death, death_location, death_comment,
-               marriage_date, marriage_location, marriage_comment
-        FROM individuals
-        WHERE id = ?
-    """, (individual_id,))
+        SELECT i.id, iti.old_id, i.canonical_name,
+               i.date_of_birth, i.birth_location, i.birth_comment,
+               i.date_of_death, i.death_location, i.death_comment,
+               i.marriage_date, i.marriage_location, i.marriage_comment
+        FROM individuals i
+        JOIN individual_tree_instances iti ON i.id = iti.individual_id
+        WHERE i.id = ? AND iti.family_tree = ?
+    """, (individual_id, family_tree))
 
     result = cursor.fetchone()
     if not result:
@@ -310,14 +350,14 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
         connector = ""
     else:
         connector = "└── " if is_last else "├── "
-    spouses = get_spouses(conn, individual_id)
+    spouses = get_spouses(conn, individual_id, family_tree)
     spouse_names = ", ".join([spouse[2]
                              for spouse in spouses]) if spouses else None
 
     print(f"{prefix}{connector}{format_person(old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment, marriage_partner_names=spouse_names)}")
 
     # Get children
-    children = get_children(conn, individual_id)
+    children = get_children(conn, individual_id, family_tree)
 
     if children:
         # Prepare new prefix for children
@@ -336,7 +376,7 @@ def draw_descendant_tree(conn, individual_id, prefix="", is_last=True, visited=N
             # For simplicity, use sequential numbering based on depth
             child_number = generation_number * 10 + idx + 1
 
-            draw_descendant_tree(conn, child_id, new_prefix, is_last_child,
+            draw_descendant_tree(conn, child_id, family_tree, new_prefix, is_last_child,
                                  visited, depth + 1, max_depth, child_number)
 
 
@@ -362,6 +402,8 @@ Examples:
                         type=int,
                         default=10,
                         help='Maximum depth for descendant tree (default: 10)')
+    parser.add_argument('--family-tree',
+                        help='Specify family tree when multiple matches exist')
     parser.add_argument('--db',
                         default='data/genealogy.db',
                         help='Path to genealogy database (default: data/genealogy.db)')
@@ -371,7 +413,7 @@ Examples:
     conn = sqlite3.connect(args.db)
 
     try:
-        results = find_individual(conn, args.name)
+        results = find_individual(conn, args.name, args.family_tree)
 
         if not results:
             print(
@@ -382,26 +424,27 @@ Examples:
             print(f"Multiple individuals found matching '{args.name}':")
             print("=" * 80)
             for individual in results:
-                print(f"  {individual[1]:4d}  {individual[2]}")
+                # individual: individual_id, family_tree, old_id, canonical_name, ...
+                print(f"  {individual[2]:4d}  [{individual[1]:<30}]  {individual[3]}")
             print("=" * 80)
-            print("\nPlease specify the ID number to see the tree for a specific person.")
+            print("\nPlease specify the ID number or use --family-tree to select a specific tree.")
             sys.exit(1)
 
         # Single result - show the tree
-        db_id, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[
-            0]
+        # Format: individual_id, family_tree, old_id, canonical_name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment
+        individual_id, family_tree, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[0]
 
         if args.descendants:
             print(f"\n{'='*80}")
-            print(f"DESCENDANT TREE FOR: {name} (ID {old_id})")
+            print(f"DESCENDANT TREE FOR: {name} (Sosa {old_id}, Family: {family_tree})")
             print(f"{'='*80}\n")
-            draw_descendant_tree(conn, db_id, "", True,
+            draw_descendant_tree(conn, individual_id, family_tree, "", True,
                                  max_depth=args.max_depth)
         else:
             print(f"\n{'='*80}")
-            print(f"ANCESTOR TREE FOR: {name} (ID {old_id})")
+            print(f"ANCESTOR TREE FOR: {name} (Sosa {old_id}, Family: {family_tree})")
             print(f"{'='*80}\n")
-            draw_ancestor_tree(conn, db_id, None, True)
+            draw_ancestor_tree(conn, individual_id, family_tree, None, True)
 
         print()  # Add blank line at end
 

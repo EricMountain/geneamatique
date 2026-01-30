@@ -48,7 +48,7 @@ class TestDatabaseConsistency(unittest.TestCase):
         """Test that individuals table has all required columns."""
         self.cursor.execute("PRAGMA table_info(individuals)")
         columns = [column[1] for column in self.cursor.fetchall()]
-        required_columns = ['id', 'old_id', 'name', 'date_of_birth', 'birth_location', 'birth_comment',
+        required_columns = ['id', 'old_id', 'family_tree', 'name', 'date_of_birth', 'birth_location', 'birth_comment',
                             'date_of_death', 'death_location', 'death_comment', 'profession',
                             'marriage_date', 'marriage_location', 'marriage_comment']
         for col in required_columns:
@@ -83,6 +83,25 @@ class TestDatabaseConsistency(unittest.TestCase):
             "SELECT COUNT(*) FROM individuals WHERE old_id IS NULL")
         count = self.cursor.fetchone()[0]
         self.assertEqual(count, 0, f"Found {count} individuals without old_id")
+    
+    def test_all_individuals_have_family_tree(self):
+        """Test that all individuals have a family_tree identifier."""
+        self.cursor.execute(
+            "SELECT COUNT(*) FROM individuals WHERE family_tree IS NULL OR family_tree = ''")
+        count = self.cursor.fetchone()[0]
+        self.assertEqual(count, 0, f"Found {count} individuals without family_tree")
+    
+    def test_old_id_unique_within_family_tree(self):
+        """Test that old_id is unique within each family tree."""
+        self.cursor.execute("""
+            SELECT old_id, family_tree, COUNT(*) as cnt
+            FROM individuals
+            GROUP BY old_id, family_tree
+            HAVING cnt > 1
+        """)
+        duplicates = self.cursor.fetchall()
+        self.assertEqual(len(duplicates), 0, 
+                        f"Found {len(duplicates)} duplicate (old_id, family_tree) combinations")
 
     def test_all_individuals_have_source_file(self):
         """Test that all individuals have at least one source file reference."""
