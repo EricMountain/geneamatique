@@ -77,47 +77,117 @@ def find_individual(conn, search_term, family_tree=None):
     return results
 
 
-def get_parents(conn, individual_id, family_tree):
-    """Get parents of an individual within a specific family tree.
-
+def get_parents(conn, individual_id, family_tree=None):
+    """Get parents of an individual, optionally within a specific family tree.
+    
+    If family_tree is provided, first try to find relationship in that tree.
+    If not found, look across all trees (for cross-tree relationships).
+    
     When a parent appears in multiple source files with the same (family_tree, old_id),
     we use the instance with the lowest old_id (or first alphabetically by source if same old_id).
     """
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT i.id, iti.old_id, i.canonical_name, 
-               i.date_of_birth, i.birth_location, i.birth_comment,
-               i.date_of_death, i.death_location, i.death_comment,
-               i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type
-        FROM relationships r
-        JOIN individuals i ON r.parent_id = i.id
-        JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ?
-            AND iti.old_id = (
-                SELECT MIN(iti2.old_id)
-                FROM individual_tree_instances iti2
-                WHERE iti2.individual_id = i.id AND iti2.family_tree = ?
-            )
-        WHERE r.child_id = ? AND r.family_tree = ?
-        GROUP BY i.id, r.relationship_type
-        ORDER BY r.relationship_type DESC
-    """, (family_tree, family_tree, individual_id, family_tree))
+    
+    # First try within the specified family_tree
+    if family_tree:
+        cursor.execute("""
+            SELECT i.id, iti.old_id, i.canonical_name, 
+                   i.date_of_birth, i.birth_location, i.birth_comment,
+                   i.date_of_death, i.death_location, i.death_comment,
+                   i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, iti.family_tree
+            FROM relationships r
+            JOIN individuals i ON r.parent_id = i.id
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE r.child_id = ? AND r.family_tree = ?
+            GROUP BY i.id, r.relationship_type
+            ORDER BY r.relationship_type DESC
+        """, (individual_id, family_tree))
+        results = cursor.fetchall()
+        if results:
+            return results
+        
+        # Not found in specified tree, try any tree where this individual appears
+        cursor.execute("""
+            SELECT i.id, iti.old_id, i.canonical_name, 
+                   i.date_of_birth, i.birth_location, i.birth_comment,
+                   i.date_of_death, i.death_location, i.death_comment,
+                   i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, r.family_tree
+            FROM relationships r
+            JOIN individuals i ON r.parent_id = i.id
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE r.child_id = ?
+            GROUP BY i.id, r.relationship_type
+            ORDER BY r.relationship_type DESC
+        """, (individual_id,))
+    else:
+        # No family tree specified, look in all trees
+        cursor.execute("""
+            SELECT i.id, iti.old_id, i.canonical_name, 
+                   i.date_of_birth, i.birth_location, i.birth_comment,
+                   i.date_of_death, i.death_location, i.death_comment,
+                   i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, r.family_tree
+            FROM relationships r
+            JOIN individuals i ON r.parent_id = i.id
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE r.child_id = ?
+            GROUP BY i.id, r.relationship_type
+            ORDER BY r.relationship_type DESC
+        """, (individual_id,))
+    
     return cursor.fetchall()
 
 
-def get_children(conn, individual_id, family_tree):
-    """Get children of an individual within a specific family tree."""
+def get_children(conn, individual_id, family_tree=None):
+    """Get children of an individual, optionally within a specific family tree.
+    
+    If family_tree is provided, first try to find relationships in that tree.
+    If not found, look across all trees (for cross-tree relationships).
+    """
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
-               i.date_of_birth, i.birth_location, i.birth_comment,
-               i.date_of_death, i.death_location, i.death_comment,
-               i.marriage_date, i.marriage_location, i.marriage_comment
-        FROM relationships r
-        JOIN individuals i ON r.child_id = i.id
-        JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ?
-        WHERE r.parent_id = ? AND r.family_tree = ?
-        ORDER BY iti.old_id
-    """, (family_tree, individual_id, family_tree))
+    
+    # First try within the specified family_tree
+    if family_tree:
+        cursor.execute("""
+            SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
+                   i.date_of_birth, i.birth_location, i.birth_comment,
+                   i.date_of_death, i.death_location, i.death_comment,
+                   i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree
+            FROM relationships r
+            JOIN individuals i ON r.child_id = i.id
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ?
+            WHERE r.parent_id = ? AND r.family_tree = ?
+            ORDER BY iti.old_id
+        """, (family_tree, individual_id, family_tree))
+        results = cursor.fetchall()
+        if results:
+            return results
+        
+        # Not found in specified tree, try any tree where this individual appears
+        cursor.execute("""
+            SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
+                   i.date_of_birth, i.birth_location, i.birth_comment,
+                   i.date_of_death, i.death_location, i.death_comment,
+                   i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree
+            FROM relationships r
+            JOIN individuals i ON r.child_id = i.id
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE r.parent_id = ?
+            ORDER BY iti.old_id
+        """, (individual_id,))
+    else:
+        # No family tree specified, look in all trees
+        cursor.execute("""
+            SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
+                   i.date_of_birth, i.birth_location, i.birth_comment,
+                   i.date_of_death, i.death_location, i.death_comment,
+                   i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree
+            FROM relationships r
+            JOIN individuals i ON r.child_id = i.id
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE r.parent_id = ?
+            ORDER BY iti.old_id
+        """, (individual_id,))
+    
     return cursor.fetchall()
 
 
@@ -283,6 +353,26 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
     # Get parents
     parents = get_parents(conn, individual_id, family_tree)
 
+    # If no parents found in current tree, look for the same person in other trees
+    # (handles case where person exists as multiple canonical individuals across trees)
+    if not parents and dob:
+        # Find other instances of this person in different trees
+        cursor.execute("""
+            SELECT DISTINCT i.id, iti.family_tree
+            FROM individuals i
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?
+        """, (name, dob, individual_id))
+        other_instances = cursor.fetchall()
+        
+        # Try to find parents for any of these other instances
+        for other_id, other_tree in other_instances:
+            parents = get_parents(conn, other_id, other_tree)
+            if parents:
+                # Found parents in another tree, use that individual_id for recursion
+                individual_id = other_id
+                break
+
     if parents:
         # Draw each parent with Sosa-Stradonitz numbering
         # Father is 2N, Mother is 2N+1
@@ -290,7 +380,7 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
         mother = None
 
         for parent in parents:
-            parent_id, parent_old_id, parent_name, parent_dob, parent_birth_loc, parent_birth_comment, parent_dod, parent_death_loc, parent_death_comment, parent_marriage, parent_marriage_loc, parent_marriage_comment, rel_type = parent
+            parent_id, parent_old_id, parent_name, parent_dob, parent_birth_loc, parent_birth_comment, parent_dod, parent_death_loc, parent_death_comment, parent_marriage, parent_marriage_loc, parent_marriage_comment, rel_type, parent_family_tree = parent
             if rel_type == 'father':
                 father = parent
             else:
@@ -306,9 +396,10 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
 
         for idx, (parent, parent_sosa) in enumerate(parents_to_draw):
             parent_id = parent[0]
+            parent_family_tree = parent[13]  # Last element is family_tree
             is_last_parent = (idx == len(parents_to_draw) - 1)
 
-            draw_ancestor_tree(conn, parent_id, family_tree, active_bars.copy(),
+            draw_ancestor_tree(conn, parent_id, parent_family_tree, active_bars.copy(),
                                is_last_parent, visited, parent_sosa, depth + 1)
 
 
@@ -359,6 +450,25 @@ def draw_descendant_tree(conn, individual_id, family_tree, prefix="", is_last=Tr
     # Get children
     children = get_children(conn, individual_id, family_tree)
 
+    # If no children found in current tree, look for the same person in other trees
+    # (handles case where person exists as multiple canonical individuals across trees)
+    if not children and dob:
+        # Find other instances of this person in different trees
+        cursor.execute("""
+            SELECT DISTINCT i.id, iti.family_tree
+            FROM individuals i
+            JOIN individual_tree_instances iti ON i.id = iti.individual_id
+            WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?
+        """, (name, dob, individual_id))
+        other_instances = cursor.fetchall()
+        
+        # Try to find children for any of these other instances
+        for other_id, other_tree in other_instances:
+            children = get_children(conn, other_id, other_tree)
+            if children:
+                # Found children in another tree
+                break
+
     if children:
         # Prepare new prefix for children
         if depth == 0:
@@ -368,7 +478,7 @@ def draw_descendant_tree(conn, individual_id, family_tree, prefix="", is_last=Tr
 
         # Draw each child
         for idx, child in enumerate(children):
-            child_id, child_old_id, child_name, child_dob, child_birth_loc, child_birth_comment, child_dod, child_death_loc, child_death_comment, child_marriage, child_marriage_loc, child_marriage_comment = child
+            child_id, child_old_id, child_name, child_dob, child_birth_loc, child_birth_comment, child_dod, child_death_loc, child_death_comment, child_marriage, child_marriage_loc, child_marriage_comment, child_family_tree = child
             is_last_child = (idx == len(children) - 1)
 
             # For descendants, we use generation.child_index numbering
@@ -376,7 +486,7 @@ def draw_descendant_tree(conn, individual_id, family_tree, prefix="", is_last=Tr
             # For simplicity, use sequential numbering based on depth
             child_number = generation_number * 10 + idx + 1
 
-            draw_descendant_tree(conn, child_id, family_tree, new_prefix, is_last_child,
+            draw_descendant_tree(conn, child_id, child_family_tree, new_prefix, is_last_child,
                                  visited, depth + 1, max_depth, child_number)
 
 
