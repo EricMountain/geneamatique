@@ -5,6 +5,7 @@ from genealogy_parser import create_database, parse_documents, store_data, get_d
 import sys
 import os
 import argparse
+import sqlite3
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -63,24 +64,40 @@ def main():
     print(f"Tree instances: {num_instances}")
     print(f"Total relationships: {num_relationships}")
 
-    # Display merged individuals
-    if merged_individuals:
-        # Group by individual_id to show all trees per person
-        from collections import defaultdict
-        merged_by_person = defaultdict(list)
-        for merge in merged_individuals:
-            merged_by_person[merge['individual_id']].append(merge)
-
+    # Display cross-tree matches
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT i.canonical_name, COUNT(DISTINCT iti.family_tree) as tree_count
+        FROM individuals i
+        JOIN individual_tree_instances iti ON i.id = iti.individual_id
+        GROUP BY i.canonical_name
+        HAVING tree_count > 1
+        ORDER BY tree_count DESC, i.canonical_name
+    ''')
+    cross_tree_results = cursor.fetchall()
+    
+    if cross_tree_results:
         print(f"\n{'='*80}")
         print(
-            f"CROSS-TREE MATCHES: {len(merged_by_person)} individual(s) found in multiple trees")
+            f"CROSS-TREE MATCHES: {len(cross_tree_results)} individual(s) found in multiple trees")
         print(f"{'='*80}")
 
-        for individual_id, merges in sorted(merged_by_person.items()):
-            name = merges[0]['name']
-            trees = sorted(set(m['family_tree'] for m in merges))
+        for name, tree_count in cross_tree_results:
+            # Get the trees for this individual
+            cursor.execute('''
+                SELECT DISTINCT iti.family_tree 
+                FROM individuals i
+                JOIN individual_tree_instances iti ON i.id = iti.individual_id
+                WHERE i.canonical_name = ?
+                ORDER BY iti.family_tree
+            ''', (name,))
+            trees = [row[0] for row in cursor.fetchall()]
             print(f"\n  {name}")
-            print(f"    Found in {len(trees) + 1} tree(s): {', '.join(trees)}")
+            print(f"    Found in {tree_count} tree(s): {', '.join(trees)}")
+    
+    conn.close()
 
     # Display accumulated date warnings
     warnings_list = get_date_warnings()
