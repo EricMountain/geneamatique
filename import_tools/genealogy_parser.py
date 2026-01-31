@@ -364,16 +364,16 @@ def clean_location(location):
     """Clean up location strings by removing leading/trailing whitespace and punctuation."""
     if not location:
         return location
-    
+
     # Strip leading/trailing whitespace
     location = location.strip()
-    
+
     # Remove leading commas, semicolons, and other punctuation
     location = re.sub(r'^[,;:.\s]+', '', location)
-    
+
     # Remove trailing punctuation
     location = re.sub(r'[,;:.\s]+$', '', location)
-    
+
     return location
 
 
@@ -842,6 +842,9 @@ def store_data(individuals, db_name='data/genealogy.db'):
     # Track merged individuals (appearing in multiple trees)
     merged_individuals = []
 
+    # Track number of conflict warnings
+    warning_count = 0
+
     for individual in individuals:
         try:
             family_tree = individual['family_tree']
@@ -872,6 +875,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
                 # Check if names match (normalize both for comparison)
                 if normalize_name(individual['name']) != normalize_name(existing_canonical_name):
                     # CONFLICT: Same (family_tree, old_id) but different people!
+                    warning_count += 1
                     print(
                         f"\033[1;33mWARNING\033[0m: Data conflict in '{family_tree}', old_id {old_id}, keeping existing entry.")
                     print(
@@ -1042,7 +1046,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
 
     conn.close()
 
-    return num_individuals, num_instances, len(relationships), merged_individuals
+    return num_individuals, num_instances, len(relationships), merged_individuals, warning_count
 
 
 if __name__ == "__main__":

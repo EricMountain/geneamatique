@@ -50,7 +50,7 @@ def main():
     print(f"   ✓ Found {len(individuals)} individuals across all documents")
 
     print("\n3. Storing data in database...")
-    num_individuals, num_instances, num_relationships, merged_individuals = store_data(
+    num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data(
         individuals, db_name)
     print(f"   ✓ Stored {num_individuals} unique individuals")
     print(f"   ✓ Created {num_instances} tree instance records")
@@ -63,11 +63,12 @@ def main():
     print(f"Canonical individuals: {num_individuals}")
     print(f"Tree instances: {num_instances}")
     print(f"Total relationships: {num_relationships}")
+    print(f"Data conflicts: {warning_count}")
 
     # Display cross-tree matches
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
-    
+
     cursor.execute('''
         SELECT i.canonical_name, COUNT(DISTINCT iti.family_tree) as tree_count
         FROM individuals i
@@ -77,7 +78,7 @@ def main():
         ORDER BY tree_count DESC, i.canonical_name
     ''')
     cross_tree_results = cursor.fetchall()
-    
+
     if cross_tree_results:
         print(f"\n{'='*80}")
         print(
@@ -96,7 +97,7 @@ def main():
             trees = [row[0] for row in cursor.fetchall()]
             print(f"\n  {name}")
             print(f"    Found in {tree_count} tree(s): {', '.join(trees)}")
-    
+
     conn.close()
 
     # Display accumulated date warnings
