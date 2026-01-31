@@ -1,22 +1,92 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <title>Family Tree Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; }
-    svg { border: 1px solid #ccc; }
-    .node circle { fill: #fff; stroke: steelblue; stroke-width: 1.5px; }
-    .node text { font: 12px sans-serif; }
-    .link { fill: none; stroke: #555; stroke-width: 1.5px; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }
+
+    #header {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px 15px;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    #header h1 {
+      font-size: 18px;
+      margin-bottom: 5px;
+    }
+
+    #header p {
+      font-size: 12px;
+      color: #666;
+    }
+
+    #chart {
+      width: calc(100% - 20px);
+      height: calc(100% - 20px);
+      margin: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fafafa;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    svg.grabbing {
+      cursor: grabbing;
+    }
+
+    .node circle {
+      fill: #fff;
+      stroke: steelblue;
+      stroke-width: 1.5px;
+    }
+
+    .node text {
+      font: 12px sans-serif;
+      pointer-events: none;
+    }
+
+    .link {
+      fill: none;
+      stroke: #555;
+      stroke-width: 1.5px;
+      pointer-events: none;
+    }
   </style>
 </head>
+
 <body>
-  <h1>Family Tree Viewer</h1>
-  <p>Open this page via a simple HTTP server (e.g. <code>python -m http.server</code>) and place a JSON file named <code>demo_tree.json</code> in the same directory, or edit <code>tree_viewer.js</code> to fetch your JSON.</p>
+  <div id="header">
+    <h1>Family Tree Viewer</h1>
+    <p>Scroll to zoom · Click and drag to pan</p>
+  </div>
   <div id="chart"></div>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="tree_viewer.js"></script>
 </body>
+
 </html>
