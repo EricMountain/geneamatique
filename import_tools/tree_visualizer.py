@@ -3,6 +3,12 @@
 Visualize genealogy trees in ASCII art format (like git log --graph).
 """
 
+from tree_utils import (
+    find_individual,
+    get_parents,
+    get_children,
+    get_spouses,
+)
 import sqlite3
 import sys
 import argparse
@@ -37,26 +43,26 @@ BIRTH_SYMBOL = '🍼'
 DEATH_SYMBOL = '🪦'
 
 # Import DB helper functions from sibling module within the package
-try:
-    from .tree_utils import (
-        find_individual,
-        get_parents,
-        get_children,
-        get_spouses,
-    )
-except ImportError:  # Fallback for direct execution (python import_tools/tree_visualizer.py ...)
-    import os
+# try:
+#     from .tree_utils import (
+#         find_individual,
+#         get_parents,
+#         get_children,
+#         get_spouses,
+#     )
+# except ImportError:  # Fallback for direct execution (python import_tools/tree_visualizer.py ...)
+#     import os
 
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if repo_root not in sys.path:
-        sys.path.insert(0, repo_root)
+#     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#     if repo_root not in sys.path:
+#         sys.path.insert(0, repo_root)
 
-    from import_tools.tree_utils import (
-        find_individual,
-        get_parents,
-        get_children,
-        get_spouses,
-    )
+#     from import_tools.tree_utils import (
+#         find_individual,
+#         get_parents,
+#         get_children,
+#         get_spouses,
+#     )
 
 
 def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,

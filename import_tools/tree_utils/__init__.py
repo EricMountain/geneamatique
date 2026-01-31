@@ -1,5 +1,5 @@
 """Exports for tree utilities package."""
-from .tree_utils import (
+from .util import (
     build_ancestor_tree,
     build_descendant_tree,
     find_individual,

@@ -1,6 +1,13 @@
 import sqlite3
 import unittest
-from import_tools import tree_utils
+from .util import (
+    build_ancestor_tree,
+    build_descendant_tree,
+    find_individual,
+    get_children,
+    get_parents,
+    get_spouses,
+)
 
 
 class TestTreeUtils(unittest.TestCase):
@@ -64,24 +71,26 @@ class TestTreeUtils(unittest.TestCase):
         self.conn.close()
 
     def test_find_individual_by_name(self):
-        results = tree_utils.find_individual(self.conn, 'A Person')
+        results = find_individual(self.conn, 'A Person')
         self.assertTrue(results)
         self.assertEqual(results[0][3], 'A Person')
 
     def test_build_ancestor_tree(self):
-        tree = tree_utils.build_ancestor_tree(self.conn, 1, 'T1')
-        self.assertIsNotNone(tree)
-        self.assertEqual(tree['name'], 'A Person')
-        # parents should include both B Father and C Mother
-        parent_names = {c['name'] for c in tree['children']}
-        self.assertEqual(parent_names, {'B Father', 'C Mother'})
+        tree = build_ancestor_tree(self.conn, 1, 'T1')
+        self.assertIsNotNone(tree, "build_ancestor_tree returned None")
+        if tree is not None:
+            self.assertEqual(tree['name'], 'A Person')
+            # parents should include both B Father and C Mother
+            parent_names = {c['name'] for c in tree['children']}
+            self.assertEqual(parent_names, {'B Father', 'C Mother'})
 
     def test_build_descendant_tree(self):
-        tree = tree_utils.build_descendant_tree(self.conn, 1, 'T1')
-        self.assertIsNotNone(tree)
-        self.assertEqual(tree['name'], 'A Person')
-        child_names = {c['name'] for c in tree['children']}
-        self.assertEqual(child_names, {'D Child'})
+        tree = build_descendant_tree(self.conn, 1, 'T1')
+        self.assertIsNotNone(tree, "build_descendant_tree returned None")
+        if tree is not None:
+            self.assertEqual(tree['name'], 'A Person')
+            child_names = {c['name'] for c in tree['children']}
+            self.assertEqual(child_names, {'D Child'})
 
 
 if __name__ == '__main__':

@@ -26,7 +26,7 @@ def find_individual(conn: sqlite3.Connection, search_term: str, family_tree: Opt
             JOIN individual_tree_instances iti ON i.id = iti.individual_id
             WHERE iti.old_id = ?
         """
-        params = [old_id]
+        params: List[int | str] = [old_id]
         if family_tree:
             query += " AND iti.family_tree = ?"
             params.append(family_tree)
