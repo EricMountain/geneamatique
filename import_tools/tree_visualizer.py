@@ -30,6 +30,13 @@ def colorize(text, color):
     return f"{color}{text}{Colors.RESET}"
 
 
+# Emoji settings (enabled by default; can be disabled via CLI flag `--no-emoji`)
+USE_EMOJI = True
+MARRIAGE_SYMBOL = '💍'
+BIRTH_SYMBOL = '🍼'
+DEATH_SYMBOL = '🪦'
+
+
 def find_individual(conn, search_term, family_tree=None):
     """Find an individual by name or old_id.
 
@@ -236,8 +243,8 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
 
     # Birth information
     if dob:
-        birth_text = "°"
-        birth_text += colorize(dob, Colors.GREEN)
+        birth_marker = BIRTH_SYMBOL if USE_EMOJI else '°'
+        birth_text = f"{birth_marker}{colorize(dob, Colors.GREEN)}"
         if birth_loc:
             birth_text += colorize(f" à {birth_loc}", Colors.GREEN)
         if birth_comment:
@@ -246,8 +253,8 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
 
     # Death information
     if dod:
-        death_text = "+"
-        death_text += colorize(dod, Colors.GRAY_BRIGHT)
+        death_marker = DEATH_SYMBOL if USE_EMOJI else '+'
+        death_text = f"{death_marker}{colorize(dod, Colors.GRAY_BRIGHT)}"
         if death_loc:
             death_text += colorize(f" à {death_loc}", Colors.GRAY_BRIGHT)
         if death_comment:
@@ -256,8 +263,8 @@ def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,
 
     # Marriage information
     if marriage:
-        marriage_text = "X"
-        marriage_text += colorize(marriage, Colors.MAGENTA)
+        marriage_marker = MARRIAGE_SYMBOL if USE_EMOJI else "X"
+        marriage_text = f"{marriage_marker}{colorize(marriage, Colors.MAGENTA)}"
         if marriage_loc:
             marriage_text += colorize(f" à {marriage_loc}", Colors.MAGENTA)
         if marriage_comment:
@@ -512,7 +519,16 @@ Examples:
                         default='data/genealogy.db',
                         help='Path to genealogy database (default: data/genealogy.db)')
 
+    parser.add_argument('--no-emoji',
+                        action='store_true',
+                        help='Disable emoji for the marriage marker (default: on)')
+
     args = parser.parse_args()
+
+    # Apply emoji settings (module-level globals)
+    global USE_EMOJI, MARRIAGE_SYMBOL
+    USE_EMOJI = not args.no_emoji
+    # MARRIAGE_SYMBOL remains the module default and cannot be overriden via CLI
 
     conn = sqlite3.connect(args.db)
 

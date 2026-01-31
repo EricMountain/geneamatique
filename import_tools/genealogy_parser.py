@@ -566,7 +566,7 @@ def parse_individual_data(cell_text, source_file=None, family_tree=None):
 
     # First, extract "dite", "né", "née", "mais" information
     dite_match = re.search(
-        r'\s+(dite|né|née|mais)\s+(.+)$', name, re.IGNORECASE)
+        r'\s+(dit|dite|né|née|mais)\s+(.+)$', name, re.IGNORECASE)
     if dite_match:
         additional_name = dite_match.group(2).strip()
         name_comment_parts.append(f"{dite_match.group(1)} {additional_name}")
