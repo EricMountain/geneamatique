@@ -881,7 +881,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
                     print(
                         f"  \033[1mExisting:\033[0m \033[32m{existing_canonical_name}\033[0m (from \033[36m\"{existing_source_file}\"\033[0m)")
                     print(
-                        f"  \033[1mNew:\033[0m \033[31m{individual['name']}\033[0m (from \033[36m\"{individual['source_file']}\"\033[0m)")
+                        f"  \033[1mNew:\033[0m      \033[31m{individual['name']}\033[0m (from \033[36m\"{individual['source_file']}\"\033[0m)")
                     continue  # Skip this conflicting entry
 
                 # Same person - prefer longer/more complete name variant
