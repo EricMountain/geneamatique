@@ -525,16 +525,24 @@ Examples:
             sys.exit(1)
 
         if len(results) > 1:
-            print(f"Multiple individuals found matching '{args.name}':")
-            print("=" * 80)
-            for individual in results:
-                # individual: individual_id, family_tree, old_id, canonical_name, ...
+            # Check if all results are the same canonical individual (same individual_id)
+            # appearing in different family trees
+            individual_ids = set(result[0] for result in results)
+            if len(individual_ids) == 1:
+                # Same canonical individual in multiple trees - just pick the first one
+                print(f"Found '{args.name}' in multiple family trees, using first match.")
+                results = [results[0]]
+            else:
+                # Different canonical individuals - prompt user to choose
+                print(f"Multiple individuals found matching '{args.name}':")
+                print("=" * 80)
+                for individual in results:
+                    # individual: individual_id, family_tree, old_id, canonical_name, ...
+                    print(
+                        f"  {individual[2]:4d}  [{individual[1]:<30}]  {individual[3]}")
+                print("=" * 80)
                 print(
-                    f"  {individual[2]:4d}  [{individual[1]:<30}]  {individual[3]}")
-            print("=" * 80)
-            print(
-                "\nPlease specify the ID number or use --family-tree to select a specific tree.")
-            sys.exit(1)
+                    "\nPlease specify the ID number or use --family-tree to select a specific tree.")
 
         # Single result - show the tree
         # Format: individual_id, family_tree, old_id, canonical_name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment
