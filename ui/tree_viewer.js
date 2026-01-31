@@ -116,41 +116,92 @@ async function render() {
 
     links.exit().remove();
 
+    // Helper: convert Catmull-Rom points to smooth cubic Bezier segments
+    // Use D3's monotone-X curve generator to produce smooth, x-monotonic cubic Bézier paths
+    const monotoneLine = d3.line()
+        .x(p => p.x)
+        .y(p => p.y)
+        .curve(d3.curveMonotoneX);
+
+    // Create a rounded polyline by replacing sharp corners with small quadratic curves
+    function roundedPolyline(points, r = 10) {
+        if (!points || points.length === 0) return '';
+        if (points.length === 1) return `M${points[0].x},${points[0].y}`;
+        if (points.length === 2) {
+            // simple cubic bezier between two points
+            const p0 = points[0];
+            const p1 = points[1];
+            const dx = Math.abs(p1.x - p0.x);
+            const cp1x = p0.x + dx * 0.4;
+            const cp2x = p1.x - dx * 0.4;
+            return `M${p0.x},${p0.y} C${cp1x},${p0.y} ${cp2x},${p1.y} ${p1.x},${p1.y}`;
+        }
+
+        let path = `M${points[0].x},${points[0].y}`;
+        for (let i = 1; i < points.length - 1; i++) {
+            const prev = points[i - 1];
+            const curr = points[i];
+            const next = points[i + 1];
+
+            const v1x = curr.x - prev.x;
+            const v1y = curr.y - prev.y;
+            const v2x = next.x - curr.x;
+            const v2y = next.y - curr.y;
+
+            const len1 = Math.hypot(v1x, v1y) || 1;
+            const len2 = Math.hypot(v2x, v2y) || 1;
+
+            const r1 = Math.min(r, len1 / 2);
+            const r2 = Math.min(r, len2 / 2);
+
+            // point where we start the corner (on the segment prev->curr)
+            const startX = curr.x - (v1x / len1) * r1;
+            const startY = curr.y - (v1y / len1) * r1;
+            // point where we end the corner (on the segment curr->next)
+            const endX = curr.x + (v2x / len2) * r2;
+            const endY = curr.y + (v2y / len2) * r2;
+
+            // line to the start of the rounded corner
+            path += ` L${startX},${startY}`;
+            // quadratic curve around the corner with control point at the corner (curr)
+            path += ` Q${curr.x},${curr.y} ${endX},${endY}`;
+        }
+        // line to the final point
+        const last = points[points.length - 1];
+        path += ` L${last.x},${last.y}`;
+        return path;
+    }
+
     links.enter().append('path')
         .attr('class', 'link')
         .merge(links)
         .transition().duration(400)
         .attr('d', d => {
-            const s = d.sections[0];
-            const start = s.startPoint;
-            const end = s.endPoint;
+            // Collect points from all sections (ELK can split edges into multiple sections)
+            if (!d.sections || d.sections.length === 0) return '';
+            const points = [];
+            d.sections.forEach((sec, idx) => {
+                if (idx === 0) points.push(sec.startPoint);
+                if (sec.bendPoints && sec.bendPoints.length) sec.bendPoints.forEach(bp => points.push(bp));
+                points.push(sec.endPoint);
+            });
 
-            if (s.bendPoints && s.bendPoints.length > 0) {
-                // Create path through all bend points with horizontal tangents
-                const points = [start, ...s.bendPoints, end];
-                let path = `M${points[0].x},${points[0].y}`;
+            // Remove consecutive duplicate points
+            const uniq = points.filter((p, i) => i === 0 || p.x !== points[i - 1].x || p.y !== points[i - 1].y);
+            if (uniq.length < 2) return '';
 
-                for (let i = 0; i < points.length - 1; i++) {
-                    const curr = points[i];
-                    const next = points[i + 1];
-
-                    // Use horizontal tangents for tree-like flow
-                    const dx = Math.abs(next.x - curr.x);
-                    const cp1x = curr.x + dx * 0.4;
-                    const cp1y = curr.y;
-                    const cp2x = next.x - dx * 0.4;
-                    const cp2y = next.y;
-
-                    path += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${next.x},${next.y}`;
-                }
-                return path;
-            } else {
-                // Simple horizontal bezier curve
-                const dx = Math.abs(end.x - start.x);
-                const cp1x = start.x + dx * 0.4;
-                const cp2x = end.x - dx * 0.4;
-                return `M${start.x},${start.y} C${cp1x},${start.y} ${cp2x},${end.y} ${end.x},${end.y}`;
+            // If only start and end points exist, generate an explicit cubic bezier so we get a curve
+            if (uniq.length === 2) {
+                const p0 = uniq[0];
+                const p1 = uniq[1];
+                const dx = Math.abs(p1.x - p0.x);
+                const cp1x = p0.x + dx * 0.4;
+                const cp2x = p1.x - dx * 0.4;
+                return `M${p0.x},${p0.y} C${cp1x},${p0.y} ${cp2x},${p1.y} ${p1.x},${p1.y}`;
             }
+
+            // For routed edges with multiple points, use rounded polyline smoothing
+            return roundedPolyline(uniq);
         });
 
     // Update Nodes
