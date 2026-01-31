@@ -357,7 +357,24 @@ def parse_event_details(text_after_marker, event_type='birth', source_file=None,
                     # No parentheses - entire remaining text is location
                     location = normalize_location_name(remaining_text)
 
-    return {'date': date_iso, 'location': location, 'comment': comment}
+    return {'date': date_iso, 'location': clean_location(location), 'comment': comment}
+
+
+def clean_location(location):
+    """Clean up location strings by removing leading/trailing whitespace and punctuation."""
+    if not location:
+        return location
+    
+    # Strip leading/trailing whitespace
+    location = location.strip()
+    
+    # Remove leading commas, semicolons, and other punctuation
+    location = re.sub(r'^[,;:.\s]+', '', location)
+    
+    # Remove trailing punctuation
+    location = re.sub(r'[,;:.\s]+$', '', location)
+    
+    return location
 
 
 def parse_date_to_iso(date_str):
@@ -656,19 +673,20 @@ def parse_documents(folder_path, ignore_patterns=None):
             print(f"Skipping directory {rel_root} (ignored)")
             dirs[:] = []  # Don't recurse into this directory
             continue
-            
+
         for filename in sorted(files):
             if filename.endswith('.odt') and not filename.startswith('tableau vide'):
                 # Check if file should be ignored
-                rel_path = os.path.relpath(os.path.join(root, filename), folder_path)
-                
+                rel_path = os.path.relpath(
+                    os.path.join(root, filename), folder_path)
+
                 # Check for exact filename match or path match
                 should_ignore = False
                 for pattern in ignore_patterns:
                     if pattern in rel_path or pattern == filename:
                         should_ignore = True
                         break
-                        
+
                 if should_ignore:
                     print(f"Skipping {rel_path} (ignored)")
                     continue
@@ -842,7 +860,8 @@ def store_data(individuals, db_name='data/genealogy.db'):
                 # Tree instance exists - check if it's the same person
                 individual_id = existing_instance[0]
                 existing_variant = existing_instance[1]
-                existing_source_file = existing_instance[2]  # Get the existing source file
+                # Get the existing source file
+                existing_source_file = existing_instance[2]
 
                 # Get the canonical name of the existing individual
                 cursor.execute('''

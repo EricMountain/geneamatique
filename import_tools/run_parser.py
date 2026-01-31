@@ -22,11 +22,11 @@ def main():
 
     # Parse ignore list from arguments or environment variable
     ignore_patterns = set()
-    
+
     # Add patterns from command line arguments
     for pattern in args.ignore_files:
         ignore_patterns.add(pattern.strip())
-    
+
     # Add patterns from environment variable (comma-separated for backward compatibility)
     if os.environ.get('GENEALOGY_IGNORE_FILES'):
         env_patterns = os.environ.get('GENEALOGY_IGNORE_FILES').split(',')

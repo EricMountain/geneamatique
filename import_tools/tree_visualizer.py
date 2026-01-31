@@ -530,7 +530,8 @@ Examples:
             individual_ids = set(result[0] for result in results)
             if len(individual_ids) == 1:
                 # Same canonical individual in multiple trees - just pick the first one
-                print(f"Found '{args.name}' in multiple family trees, using first match.")
+                print(
+                    f"Found '{args.name}' in multiple family trees, using first match.")
                 results = [results[0]]
             else:
                 # Different canonical individuals - prompt user to choose
@@ -552,14 +553,14 @@ Examples:
         if args.descendants:
             print(f"\n{'='*80}")
             print(
-                f"DESCENDANT TREE FOR: {name} (Sosa {old_id}, Family: {family_tree})")
+                f"DESCENDANT TREE FOR: {name}")
             print(f"{'='*80}\n")
             draw_descendant_tree(conn, individual_id, family_tree, "", True,
                                  max_depth=args.max_depth)
         else:
             print(f"\n{'='*80}")
             print(
-                f"ANCESTOR TREE FOR: {name} (Sosa {old_id}, Family: {family_tree})")
+                f"ANCESTOR TREE FOR: {name}")
             print(f"{'='*80}\n")
             draw_ancestor_tree(conn, individual_id, family_tree, None, True)
 
