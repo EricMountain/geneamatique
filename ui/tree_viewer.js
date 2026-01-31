@@ -60,10 +60,12 @@ function calculateNodeDimensions(d) {
         });
     }
 
-    const baseHeight = 24;
-    const height = isExpanded ? baseHeight + details.length * 11 : baseHeight;
+    const nameHeight = 24;
+    const detailLineHeight = 11;
+    const detailsTopPadding = 14; // gap between name and first detail line
+    const height = isExpanded ? nameHeight + detailsTopPadding + details.length * detailLineHeight : nameHeight;
     return { width: Math.max(100, maxWidth), height };
-}
+} 
 
 async function render() {
     if (!rootData) return;
@@ -253,7 +255,12 @@ async function render() {
             .attr('font-size', '10px')
             .merge(detailTexts)
             .attr('x', d.width / 2)
-            .attr('y', (text, i) => 38 + i * 11)
+            .attr('y', (text, i) => {
+                const nameHeight = 24;
+                const detailLineHeight = 11;
+                const detailsTopPadding = 14;
+                return nameHeight + detailsTopPadding + i * detailLineHeight;
+            })
             .text(text => text);
     });
 
