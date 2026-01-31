@@ -126,29 +126,30 @@ async function render() {
             const end = s.endPoint;
 
             if (s.bendPoints && s.bendPoints.length > 0) {
-                // Create smooth cubic bezier curve through bend points
-                let path = `M${start.x},${start.y}`;
+                // Create path through all bend points with horizontal tangents
                 const points = [start, ...s.bendPoints, end];
+                let path = `M${points[0].x},${points[0].y}`;
 
                 for (let i = 0; i < points.length - 1; i++) {
-                    const p0 = points[i];
-                    const p1 = points[i + 1];
-                    const mx = (p0.x + p1.x) / 2;
-                    const my = (p0.y + p1.y) / 2;
+                    const curr = points[i];
+                    const next = points[i + 1];
 
-                    if (i === 0) {
-                        path += ` Q${p0.x},${p0.y} ${mx},${my}`;
-                    } else if (i === points.length - 2) {
-                        path += ` Q${p1.x},${p1.y} ${p1.x},${p1.y}`;
-                    } else {
-                        path += ` Q${p0.x},${p0.y} ${mx},${my}`;
-                    }
+                    // Use horizontal tangents for tree-like flow
+                    const dx = Math.abs(next.x - curr.x);
+                    const cp1x = curr.x + dx * 0.4;
+                    const cp1y = curr.y;
+                    const cp2x = next.x - dx * 0.4;
+                    const cp2y = next.y;
+
+                    path += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${next.x},${next.y}`;
                 }
                 return path;
             } else {
                 // Simple horizontal bezier curve
-                const mx = (start.x + end.x) / 2;
-                return `M${start.x},${start.y} C${mx},${start.y} ${mx},${end.y} ${end.x},${end.y}`;
+                const dx = Math.abs(end.x - start.x);
+                const cp1x = start.x + dx * 0.4;
+                const cp2x = end.x - dx * 0.4;
+                return `M${start.x},${start.y} C${cp1x},${start.y} ${cp2x},${end.y} ${end.x},${end.y}`;
             }
         });
 
