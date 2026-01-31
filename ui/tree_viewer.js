@@ -36,12 +36,40 @@ function formatDetails(d) {
     const DEATH_SYMBOL = '🪦';
     const MARRIAGE_SYMBOL = '💍';
     const lines = [];
-    if (d.date_of_birth) lines.push(`${BIRTH_SYMBOL} ${d.date_of_birth}`);
-    if (d.date_of_death) lines.push(`${DEATH_SYMBOL} ${d.date_of_death}`);
-    if (d.marriage_date) lines.push(`${MARRIAGE_SYMBOL} ${d.marriage_date}`);
+
+    // Name comment (shown near the name in the CLI tool; show on hover here)
+    if (d.name_comment) lines.push(`(${d.name_comment})`);
+
+    // Birth: date + optional location on same line
+    if (d.date_of_birth || d.birth_location) {
+        let s = '';
+        if (d.date_of_birth) s += `${BIRTH_SYMBOL} ${d.date_of_birth}`;
+        if (d.birth_location) s += `${s ? ' ' : ''}à ${d.birth_location}`;
+        if (s) lines.push(s);
+    }
     if (d.birth_comment) lines.push(`(${d.birth_comment})`);
+
+    // Death: date + optional location
+    if (d.date_of_death || d.death_location) {
+        let s = '';
+        if (d.date_of_death) s += `${DEATH_SYMBOL} ${d.date_of_death}`;
+        if (d.death_location) s += `${s ? ' ' : ''}à ${d.death_location}`;
+        if (s) lines.push(s);
+    }
     if (d.death_comment) lines.push(`(${d.death_comment})`);
+
+    // Marriage: date + optional location
+    if (d.marriage_date || d.marriage_location) {
+        let s = '';
+        if (d.marriage_date) s += `${MARRIAGE_SYMBOL} ${d.marriage_date}`;
+        if (d.marriage_location) s += `${s ? ' ' : ''}à ${d.marriage_location}`;
+        if (s) lines.push(s);
+    }
     if (d.marriage_comment) lines.push(`(${d.marriage_comment})`);
+
+    // Database id for reference
+    if (d.db_id !== undefined && d.db_id !== null) lines.push(`[${d.db_id}]`);
+
     return lines;
 }
 
@@ -52,7 +80,7 @@ function estimateTextWidth(text, fontSize = 12) {
     // Add a bit more horizontal padding so text doesn't sit too close to the rectangle edge
     const horizontalPadding = 28;
     return text.length * charWidth + horizontalPadding;
-} 
+}
 
 // Calculate node dimensions
 function calculateNodeDimensions(d) {
