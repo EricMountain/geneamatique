@@ -43,9 +43,12 @@ function formatDetails(d) {
 
 // Calculate approximate text width
 function estimateTextWidth(text, fontSize = 12) {
-    const charWidth = fontSize * 0.55;
-    return text.length * charWidth + 20;
-}
+    // Use a slightly larger per-character factor to better handle bold and wide glyphs
+    const charWidth = fontSize * 0.60;
+    // Add a bit more horizontal padding so text doesn't sit too close to the rectangle edge
+    const horizontalPadding = 28;
+    return text.length * charWidth + horizontalPadding;
+} 
 
 // Calculate node dimensions
 function calculateNodeDimensions(d) {
@@ -64,8 +67,9 @@ function calculateNodeDimensions(d) {
     const detailLineHeight = 11;
     const detailsTopPadding = 14; // gap between name and first detail line
     const height = isExpanded ? nameHeight + detailsTopPadding + details.length * detailLineHeight : nameHeight;
-    return { width: Math.max(100, maxWidth), height };
-} 
+    // Increase minimum width to give long names a little more breathing room
+    return { width: Math.max(120, maxWidth), height };
+}
 
 async function render() {
     if (!rootData) return;
