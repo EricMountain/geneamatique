@@ -873,13 +873,11 @@ def store_data(individuals, db_name='data/genealogy.db'):
                 if normalize_name(individual['name']) != normalize_name(existing_canonical_name):
                     # CONFLICT: Same (family_tree, old_id) but different people!
                     print(
-                        f"WARNING: Data conflict in '{family_tree}', old_id {old_id}:")
+                        f"\033[1;33mWARNING\033[0m: Data conflict in '{family_tree}', old_id {old_id}, keeping existing entry.")
                     print(
-                        f"  Existing: {existing_canonical_name} (from {existing_source_file})")
+                        f"  \033[1mExisting:\033[0m \033[32m{existing_canonical_name}\033[0m (from \033[36m\"{existing_source_file}\"\033[0m)")
                     print(
-                        f"  New: {individual['name']} (from {individual['source_file']})")
-                    print(
-                        f"  Keeping existing entry. Check source files for inconsistencies.")
+                        f"  \033[1mNew:\033[0m \033[31m{individual['name']}\033[0m (from \033[36m\"{individual['source_file']}\"\033[0m)")
                     continue  # Skip this conflicting entry
 
                 # Same person - prefer longer/more complete name variant
