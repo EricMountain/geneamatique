@@ -36,185 +36,27 @@ MARRIAGE_SYMBOL = '💍'
 BIRTH_SYMBOL = '🍼'
 DEATH_SYMBOL = '🪦'
 
+# Import DB helper functions from sibling module within the package
+try:
+    from .tree_utils import (
+        find_individual,
+        get_parents,
+        get_children,
+        get_spouses,
+    )
+except ImportError:  # Fallback for direct execution (python import_tools/tree_visualizer.py ...)
+    import os
 
-def find_individual(conn, search_term, family_tree=None):
-    """Find an individual by name or old_id.
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
 
-    Returns list of tuples: (individual_id, family_tree, old_id, canonical_name, ...)
-    Deduplicates multiple instances with same (individual_id, family_tree, old_id) from different source files.
-    """
-    cursor = conn.cursor()
-
-    # Try as old_id first
-    try:
-        old_id = int(search_term)
-        query = """
-            SELECT DISTINCT i.id, iti.family_tree, iti.old_id, i.canonical_name, 
-                   i.date_of_birth, i.birth_location, i.birth_comment,
-                   i.date_of_death, i.death_location, i.death_comment,
-                   i.marriage_date, i.marriage_location, i.marriage_comment
-            FROM individuals i
-            JOIN individual_tree_instances iti ON i.id = iti.individual_id
-            WHERE iti.old_id = ?
-        """
-        params = [old_id]
-        if family_tree:
-            query += " AND iti.family_tree = ?"
-            params.append(family_tree)
-        query += " ORDER BY iti.family_tree, iti.old_id"
-        cursor.execute(query, params)
-    except ValueError:
-        # Search by name
-        query = """
-            SELECT DISTINCT i.id, iti.family_tree, iti.old_id, i.canonical_name,
-                   i.date_of_birth, i.birth_location, i.birth_comment,
-                   i.date_of_death, i.death_location, i.death_comment,
-                   i.marriage_date, i.marriage_location, i.marriage_comment
-            FROM individuals i
-            JOIN individual_tree_instances iti ON i.id = iti.individual_id
-            WHERE i.canonical_name LIKE ?
-        """
-        params = [f"%{search_term}%"]
-        if family_tree:
-            query += " AND iti.family_tree = ?"
-            params.append(family_tree)
-        query += " ORDER BY iti.family_tree, iti.old_id"
-        cursor.execute(query, params)
-
-    results = cursor.fetchall()
-    return results
-
-
-def get_parents(conn, individual_id, family_tree=None):
-    """Get parents of an individual, optionally within a specific family tree.
-
-    If family_tree is provided, first try to find relationship in that tree.
-    If not found, look across all trees (for cross-tree relationships).
-
-    When a parent appears in multiple source files with the same (family_tree, old_id),
-    we use the instance with the lowest old_id (or first alphabetically by source if same old_id).
-    """
-    cursor = conn.cursor()
-
-    # First try within the specified family_tree
-    if family_tree:
-        cursor.execute("""
-            SELECT i.id, iti.old_id, i.canonical_name, 
-                   i.date_of_birth, i.birth_location, i.birth_comment,
-                   i.date_of_death, i.death_location, i.death_comment,
-                   i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, iti.family_tree
-            FROM relationships r
-            JOIN individuals i ON r.parent_id = i.id
-            JOIN individual_tree_instances iti ON i.id = iti.individual_id
-            WHERE r.child_id = ? AND r.family_tree = ?
-            GROUP BY i.id, r.relationship_type
-            ORDER BY r.relationship_type DESC
-        """, (individual_id, family_tree))
-        results = cursor.fetchall()
-        if results:
-            return results
-
-        # Not found in specified tree, try any tree where this individual appears
-        cursor.execute("""
-            SELECT i.id, iti.old_id, i.canonical_name, 
-                   i.date_of_birth, i.birth_location, i.birth_comment,
-                   i.date_of_death, i.death_location, i.death_comment,
-                   i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, r.family_tree
-            FROM relationships r
-            JOIN individuals i ON r.parent_id = i.id
-            JOIN individual_tree_instances iti ON i.id = iti.individual_id
-            WHERE r.child_id = ?
-            GROUP BY i.id, r.relationship_type
-            ORDER BY r.relationship_type DESC
-        """, (individual_id,))
-    else:
-        # No family tree specified, look in all trees
-        cursor.execute("""
-            SELECT i.id, iti.old_id, i.canonical_name, 
-                   i.date_of_birth, i.birth_location, i.birth_comment,
-                   i.date_of_death, i.death_location, i.death_comment,
-                   i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, r.family_tree
-            FROM relationships r
-            JOIN individuals i ON r.parent_id = i.id
-            JOIN individual_tree_instances iti ON i.id = iti.individual_id
-            WHERE r.child_id = ?
-            GROUP BY i.id, r.relationship_type
-            ORDER BY r.relationship_type DESC
-        """, (individual_id,))
-
-    return cursor.fetchall()
-
-
-def get_children(conn, individual_id, family_tree=None):
-    """Get children of an individual, optionally within a specific family tree.
-
-    If family_tree is provided, first try to find relationships in that tree.
-    If not found, look across all trees (for cross-tree relationships).
-    """
-    cursor = conn.cursor()
-
-    # First try within the specified family_tree
-    if family_tree:
-        cursor.execute("""
-            SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
-                   i.date_of_birth, i.birth_location, i.birth_comment,
-                   i.date_of_death, i.death_location, i.death_comment,
-                   i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree
-            FROM relationships r
-            JOIN individuals i ON r.child_id = i.id
-            JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ?
-            WHERE r.parent_id = ? AND r.family_tree = ?
-            ORDER BY iti.old_id
-        """, (family_tree, individual_id, family_tree))
-        results = cursor.fetchall()
-        if results:
-            return results
-
-        # Not found in specified tree, try any tree where this individual appears
-        cursor.execute("""
-            SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
-                   i.date_of_birth, i.birth_location, i.birth_comment,
-                   i.date_of_death, i.death_location, i.death_comment,
-                   i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree
-            FROM relationships r
-            JOIN individuals i ON r.child_id = i.id
-            JOIN individual_tree_instances iti ON i.id = iti.individual_id
-            WHERE r.parent_id = ?
-            ORDER BY iti.old_id
-        """, (individual_id,))
-    else:
-        # No family tree specified, look in all trees
-        cursor.execute("""
-            SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
-                   i.date_of_birth, i.birth_location, i.birth_comment,
-                   i.date_of_death, i.death_location, i.death_comment,
-                   i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree
-            FROM relationships r
-            JOIN individuals i ON r.child_id = i.id
-            JOIN individual_tree_instances iti ON i.id = iti.individual_id
-            WHERE r.parent_id = ?
-            ORDER BY iti.old_id
-        """, (individual_id,))
-
-    return cursor.fetchall()
-
-
-def get_spouses(conn, individual_id, family_tree):
-    """Get spouses of an individual based on shared children within a tree."""
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
-               i.date_of_birth, i.birth_location, i.birth_comment,
-               i.date_of_death, i.death_location, i.death_comment,
-               i.marriage_date, i.marriage_location, i.marriage_comment
-        FROM relationships r
-        JOIN relationships r2 ON r.child_id = r2.child_id AND r.family_tree = r2.family_tree
-        JOIN individuals i ON r2.parent_id = i.id
-        JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ?
-        WHERE r.parent_id = ? AND r2.parent_id != r.parent_id AND r.family_tree = ?
-        ORDER BY iti.old_id
-    """, (family_tree, individual_id, family_tree))
-    return cursor.fetchall()
+    from import_tools.tree_utils import (
+        find_individual,
+        get_parents,
+        get_children,
+        get_spouses,
+    )
 
 
 def format_person(old_id, name, dob=None, birth_loc=None, birth_comment=None,

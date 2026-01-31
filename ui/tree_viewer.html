@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Family Tree Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; }
+    svg { border: 1px solid #ccc; }
+    .node circle { fill: #fff; stroke: steelblue; stroke-width: 1.5px; }
+    .node text { font: 12px sans-serif; }
+    .link { fill: none; stroke: #555; stroke-width: 1.5px; }
+  </style>
+</head>
+<body>
+  <h1>Family Tree Viewer</h1>
+  <p>Open this page via a simple HTTP server (e.g. <code>python -m http.server</code>) and place a JSON file named <code>demo_tree.json</code> in the same directory, or edit <code>tree_viewer.js</code> to fetch your JSON.</p>
+  <div id="chart"></div>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="tree_viewer.js"></script>
+</body>
+</html>
