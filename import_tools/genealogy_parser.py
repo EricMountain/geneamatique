@@ -670,7 +670,8 @@ def parse_documents(folder_path, ignore_patterns=None):
         # Check if current directory should be ignored
         rel_root = os.path.relpath(root, folder_path)
         if rel_root != '.' and any(pattern in rel_root for pattern in ignore_patterns):
-            print(f"Skipping directory {rel_root} (ignored)")
+            print(
+                f"\033[1;33mSkipping\033[0m directory \033[1;36m\"{rel_root}\"\033[0m (\033[38;5;208mignored\033[0m)")
             dirs[:] = []  # Don't recurse into this directory
             continue
 
@@ -688,14 +689,15 @@ def parse_documents(folder_path, ignore_patterns=None):
                         break
 
                 if should_ignore:
-                    print(f"Skipping {rel_path} (ignored)")
+                    print(
+                        f"\033[1;33mSkipping\033[0m \033[1;36m\"{rel_path}\"\033[0m (\033[38;5;208mignored\033[0m)")
                     continue
 
                 filepath = os.path.join(root, filename)
-                print(f"Parsing {rel_path}...")
                 individuals = parse_document(filepath, folder_path)
                 all_individuals.extend(individuals)
-                print(f"  Found {len(individuals)} individuals")
+                print(
+                    f"\033[1;33mParsing\033[0m \033[1;36m\"{rel_path}\"\033[0m... found \033[1;33m{len(individuals)} individuals\033[0m")
 
     return all_individuals
 
