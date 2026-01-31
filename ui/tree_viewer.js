@@ -6,7 +6,7 @@ let width = window.innerWidth - margin.left - margin.right;
 let height = window.innerHeight - margin.top - margin.bottom;
 
 const dx = 20;
-const dy = Math.max(width / 8, 200); // dynamic dy based on viewport
+let dy = Math.max(width / 8, 200); // dynamic dy based on viewport
 
 const svg = d3.select('#chart').append('svg')
     .attr('width', width + margin.left + margin.right)
@@ -28,37 +28,127 @@ svg.on('mousedown', () => svg.classed('grabbing', true));
 svg.on('mouseup', () => svg.classed('grabbing', false));
 svg.on('mouseleave', () => svg.classed('grabbing', false));
 
+// Helper to format details for display
+function formatDetails(d) {
+    const lines = [];
+    if (d.date_of_birth) lines.push(`b: ${d.date_of_birth}`);
+    if (d.date_of_death) lines.push(`d: ${d.date_of_death}`);
+    if (d.marriage_date) lines.push(`m: ${d.marriage_date}`);
+    if (d.birth_comment) lines.push(`(${d.birth_comment})`);
+    if (d.death_comment) lines.push(`(${d.death_comment})`);
+    if (d.marriage_comment) lines.push(`(${d.marriage_comment})`);
+    return lines;
+}
+
+// Calculate approximate text width (rough estimate in pixels)
+function estimateTextWidth(text, fontSize = 12) {
+    const charWidth = fontSize * 0.5; // Rough estimate: char width ~ half font size
+    return text.length * charWidth + 16; // Add padding
+}
+
+// Calculate node dimensions based on content
+function calculateNodeDimensions(d) {
+    const details = formatDetails(d);
+    const name = d.name || '';
+    let maxWidth = estimateTextWidth(name, 13);
+    details.forEach(detail => {
+        maxWidth = Math.max(maxWidth, estimateTextWidth(detail, 10));
+    });
+    const height = 24 + details.length * 11;
+    return { width: Math.max(80, maxWidth), height, detailCount: details.length };
+}
+
 function render(data) {
     const root = d3.hierarchy(data);
+
+    // Pre-calculate all node dimensions
+    const nodeDimensions = new Map();
+    root.descendants().forEach(node => {
+        nodeDimensions.set(node.data.db_id, calculateNodeDimensions(node.data));
+    });
+
+    // Calculate max width to determine horizontal spacing
+    let maxNodeWidth = 80;
+    nodeDimensions.forEach(dims => {
+        maxNodeWidth = Math.max(maxNodeWidth, dims.width);
+    });
+
+    // Adjust dy to provide enough space for wide nodes (prevent horizontal overlaps)
+    dy = Math.max(width / 8, 200, maxNodeWidth + 60);
+
     const treeLayout = d3.tree().nodeSize([dx, dy]);
     treeLayout(root);
 
     const nodes = root.descendants();
     const links = root.links();
 
-    // Calculate bounds for auto-zoom (optional: can be used to fit tree)
-    const minX = d3.min(nodes, d => d.x);
-    const maxX = d3.max(nodes, d => d.x);
-    const minY = d3.min(nodes, d => d.y);
-    const maxY = d3.max(nodes, d => d.y);
-
     // Draw links first (behind nodes)
     g.selectAll('.link').data(links).join('path')
         .attr('class', 'link')
         .attr('d', d3.linkHorizontal().x(d => d.y).y(d => d.x));
 
-    // Draw nodes
-    const node = g.selectAll('.node').data(nodes).join('g')
+    // Draw nodes as expandable rectangles
+    const nodeGroups = g.selectAll('.node').data(nodes, d => d.data.db_id).join('g')
         .attr('class', 'node')
         .attr('transform', d => `translate(${d.y},${d.x})`);
 
-    node.append('circle').attr('r', 6);
+    // Add background rectangle with calculated dimensions
+    nodeGroups.append('rect')
+        .attr('width', d => {
+            const dims = nodeDimensions.get(d.data.db_id);
+            return dims ? dims.width : 80;
+        })
+        .attr('height', 24)
+        .attr('x', d => {
+            const dims = nodeDimensions.get(d.data.db_id);
+            return dims ? -dims.width / 2 : -40;
+        })
+        .attr('y', -12);
 
-    node.append('text')
-        .attr('dy', '0.31em')
-        .attr('x', d => d.children ? -10 : 10)
-        .attr('text-anchor', d => d.children ? 'end' : 'start')
-        .text(d => d.data.name + (d.data.date_of_birth ? ` (${d.data.date_of_birth})` : ''));
+    // Add name label (always visible)
+    nodeGroups.append('text')
+        .attr('class', 'name')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '0.35em')
+        .text(d => d.data.name);
+
+    // Add detail lines (collapsed by default)
+    const detailData = (d) => {
+        const details = formatDetails(d.data);
+        return details.map((text, i) => ({ text, index: i }));
+    };
+
+    nodeGroups.selectAll('.detail-text').remove(); // Clear old details
+
+    nodeGroups.selectAll('.detail-text')
+        .data(d => detailData(d), d => d.index)
+        .join('text')
+        .attr('class', 'details')
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '9px')
+        .attr('y', (d, i) => 12 + i * 11)
+        .text(d => d.text);
+
+    // Add hover interaction
+    nodeGroups.on('mouseenter', function () {
+        d3.select(this).classed('expanded', true);
+        const node = d3.select(this).datum();
+        const dims = nodeDimensions.get(node.data.db_id);
+        const details = formatDetails(node.data);
+        const newHeight = Math.max(24, 24 + details.length * 11);
+
+        d3.select(this).select('rect')
+            .transition().duration(200)
+            .attr('height', newHeight)
+            .attr('y', -newHeight / 2);
+    })
+        .on('mouseleave', function () {
+            d3.select(this).classed('expanded', false);
+            d3.select(this).select('rect')
+                .transition().duration(200)
+                .attr('height', 24)
+                .attr('y', -12);
+        });
 }
 
 // Handle window resize

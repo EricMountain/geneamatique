@@ -12,7 +12,8 @@
       box-sizing: border-box;
     }
 
-    html, body {
+    html,
+    body {
       width: 100%;
       height: 100%;
       font-family: Arial, Helvetica, sans-serif;
@@ -59,22 +60,47 @@
       cursor: grabbing;
     }
 
-    .node circle {
+    .node rect {
       fill: #fff;
       stroke: steelblue;
-      stroke-width: 1.5px;
+      stroke-width: 2px;
+      rx: 4;
+      ry: 4;
+      cursor: pointer;
     }
 
-    .node text {
-      font: 12px sans-serif;
-      pointer-events: none;
+    .node.expanded rect {
+      stroke-width: 3px;
+      stroke: #0056b3;
     }
 
-    .link {
-      fill: none;
-      stroke: #555;
-      stroke-width: 1.5px;
+    .node text.name {
+      font: bold 13px sans-serif;
       pointer-events: none;
+      fill: #333;
+    }
+
+    .node text.details {
+      font: 10px sans-serif;
+      pointer-events: none;
+      fill: #666;
+    }
+
+    .node text.label {
+      font: 10px sans-serif;
+      pointer-events: none;
+      fill: #999;
+    }
+
+    .node text.details,
+    .node text.label {
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .node.expanded text.details,
+    .node.expanded text.label {
+      opacity: 1;
     }
   </style>
 </head>
