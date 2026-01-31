@@ -1,5 +1,6 @@
 # Local data and databases
 /data
+/ui/demo_tree.json
 /tmp
 *.db
 *.sqlite
