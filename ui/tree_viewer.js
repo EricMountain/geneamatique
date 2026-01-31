@@ -73,14 +73,24 @@ function formatDetails(d) {
     return lines;
 }
 
-// Calculate approximate text width
+// Calculate approximate text width (use canvas.measureText for accuracy)
+const _textMeasurer = (() => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    return (text, fontSize = 12, fontFamily = 'sans-serif', fontWeight = 'normal') => {
+        ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+        return ctx.measureText(text).width;
+    };
+})();
+
 function estimateTextWidth(text, fontSize = 12) {
-    // Use a slightly larger per-character factor to better handle bold and wide glyphs
-    const charWidth = fontSize * 0.60;
-    // Add a bit more horizontal padding so text doesn't sit too close to the rectangle edge
+    if (!text) return 0;
+    // Use the canvas-based measurer for a more accurate width (handles emojis and wide glyphs better)
+    const measured = _textMeasurer(text, fontSize);
+    // Add horizontal padding so text doesn't sit too close to the rectangle edge
     const horizontalPadding = 28;
-    return text.length * charWidth + horizontalPadding;
-}
+    return measured + horizontalPadding;
+} 
 
 // Calculate node dimensions
 function calculateNodeDimensions(d) {
@@ -100,7 +110,7 @@ function calculateNodeDimensions(d) {
     const detailsTopPadding = 14; // gap between name and first detail line
     const height = isExpanded ? nameHeight + detailsTopPadding + details.length * detailLineHeight : nameHeight;
     // Increase minimum width to give long names a little more breathing room
-    return { width: Math.max(120, maxWidth), height };
+    return { width: Math.max(160, maxWidth), height };
 }
 
 async function render() {
