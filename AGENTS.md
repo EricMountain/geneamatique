@@ -15,6 +15,7 @@ This repo parses genealogy tables from ODT files into an SQLite database, then p
 - Inspect database: run inspect_database.py.
 - Query individuals: run query_genealogy.py <name_or_id>.
 - Visualize trees: run tree_visualizer.py <name_or_id>.
+- Always use `local_import_data.sh` to recreate and import data. It ignores files that contain inconsistent data.
 
 ## How to Test
 - Run unit tests with unittest.
