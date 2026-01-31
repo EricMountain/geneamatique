@@ -11,6 +11,7 @@ This repo parses genealogy tables from ODT files into an SQLite database, then p
 - If you need a temporary script, create it under a tmp directory in the repo. Don’t use /tmp to avoid having to prompt the user.
 
 ## How to Run
+- Use Python virtual environment `.venv`.
 - Parse documents: run run_parser.py.
 - Inspect database: run inspect_database.py.
 - Query individuals: run query_genealogy.py <name_or_id>.

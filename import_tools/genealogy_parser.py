@@ -560,14 +560,27 @@ def parse_individual_data(cell_text, source_file=None, family_tree=None):
     old_id = int(match.group(1))
     full_name = match.group(2).strip()
 
-    # Extract parenthetical comment from name if present
-    name_comment = None
-    name_match = re.search(r'\s*\(([^)]+)\)$', full_name)
-    if name_match:
-        name_comment = name_match.group(1).strip()
-        name = full_name[:name_match.start()].strip()
-    else:
-        name = full_name
+    # Extract additional name information from "dite", "né", "née", "mais" patterns and parenthetical comments
+    name_comment_parts = []
+    name = full_name
+
+    # First, extract "dite", "né", "née", "mais" information
+    dite_match = re.search(
+        r'\s+(dite|né|née|mais)\s+(.+)$', name, re.IGNORECASE)
+    if dite_match:
+        additional_name = dite_match.group(2).strip()
+        name_comment_parts.append(f"{dite_match.group(1)} {additional_name}")
+        name = name[:dite_match.start()].strip()
+
+    # Then extract parenthetical comments
+    paren_match = re.search(r'\s*\(([^)]+)\)$', name)
+    if paren_match:
+        name_comment_parts.append(paren_match.group(1).strip())
+        name = name[:paren_match.start()].strip()
+
+    # Combine all name comment parts
+    name_comment = '; '.join(
+        name_comment_parts) if name_comment_parts else None
 
     # Parse other fields
     birth_details = {'date': None, 'location': None, 'comment': None}
