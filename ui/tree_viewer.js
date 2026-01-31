@@ -31,10 +31,14 @@ let rootData = null;
 
 // Helper to format details for display
 function formatDetails(d) {
+    // Use same emoji markers as import_tools/tree_visualizer.py for consistency
+    const BIRTH_SYMBOL = '🍼';
+    const DEATH_SYMBOL = '🪦';
+    const MARRIAGE_SYMBOL = '💍';
     const lines = [];
-    if (d.date_of_birth) lines.push(`b: ${d.date_of_birth}`);
-    if (d.date_of_death) lines.push(`d: ${d.date_of_death}`);
-    if (d.marriage_date) lines.push(`m: ${d.marriage_date}`);
+    if (d.date_of_birth) lines.push(`${BIRTH_SYMBOL} ${d.date_of_birth}`);
+    if (d.date_of_death) lines.push(`${DEATH_SYMBOL} ${d.date_of_death}`);
+    if (d.marriage_date) lines.push(`${MARRIAGE_SYMBOL} ${d.marriage_date}`);
     if (d.birth_comment) lines.push(`(${d.birth_comment})`);
     if (d.death_comment) lines.push(`(${d.death_comment})`);
     if (d.marriage_comment) lines.push(`(${d.marriage_comment})`);
