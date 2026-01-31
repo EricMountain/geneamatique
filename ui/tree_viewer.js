@@ -67,8 +67,11 @@ function formatDetails(d) {
     }
     if (d.marriage_comment) lines.push(`(${d.marriage_comment})`);
 
-    // Database id for reference
-    if (d.db_id !== undefined && d.db_id !== null) lines.push(`[${d.db_id}]`);
+    // Database id and SOSA number for reference
+    if (d.db_id !== undefined && d.db_id !== null) {
+        const sosaPart = (d.sosa !== undefined && d.sosa !== null) ? `SOSA: ${d.sosa} ` : 'SOSA: ';
+        lines.push(`${sosaPart}Id: ${d.db_id}`);
+    }
 
     return lines;
 }

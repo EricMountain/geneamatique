@@ -1,5 +1,6 @@
 import sqlite3
 import unittest
+import json
 from .util import (
     build_ancestor_tree,
     build_descendant_tree,
@@ -84,6 +85,16 @@ class TestTreeUtils(unittest.TestCase):
             parent_names = {c['name'] for c in tree['children']}
             self.assertEqual(parent_names, {'B Father', 'C Mother'})
 
+            # SOSA numbering: root is 1, father=2, mother=3
+            self.assertIn('sosa', tree)
+            self.assertEqual(tree['sosa'], 1)
+            sosa_by_name = {c['name']: c['sosa'] for c in tree['children']}
+            self.assertEqual(sosa_by_name['B Father'], 2)
+            self.assertEqual(sosa_by_name['C Mother'], 3)
+
+            # old_id should no longer be part of the node dict
+            self.assertNotIn('old_id', tree)
+
     def test_build_descendant_tree(self):
         tree = build_descendant_tree(self.conn, 1, 'T1')
         self.assertIsNotNone(tree, "build_descendant_tree returned None")
@@ -91,6 +102,25 @@ class TestTreeUtils(unittest.TestCase):
             self.assertEqual(tree['name'], 'A Person')
             child_names = {c['name'] for c in tree['children']}
             self.assertEqual(child_names, {'D Child'})
+
+            # Descendant nodes should include a 'sosa' key set to None
+            self.assertIn('sosa', tree)
+            self.assertIsNone(tree['sosa'])
+            for c in tree['children']:
+                self.assertIn('sosa', c)
+                self.assertIsNone(c['sosa'])
+
+    def test_tree_json_no_old_id_and_has_sosa(self):
+        tree = build_ancestor_tree(self.conn, 1, 'T1')
+        self.assertIsNotNone(tree)
+        s = json.dumps(tree)
+        self.assertNotIn('old_id', s)
+        # sosa for root should be present in JSON and should appear before children
+        self.assertIn('"sosa": 1', s)
+        sosa_idx = s.find('"sosa": 1')
+        children_idx = s.find('"children"')
+        self.assertTrue(sosa_idx != -1 and children_idx != -1 and sosa_idx < children_idx,
+                        "'sosa' should appear before 'children' in JSON")
 
 
 if __name__ == '__main__':

@@ -168,11 +168,14 @@ def get_spouses(conn: sqlite3.Connection, individual_id: int, family_tree: str):
 
 
 def _record_to_node(record: tuple, family_tree: Optional[str] = None) -> Dict:
-    """Convert a DB record tuple to a serializable node dict."""
+    """Convert a DB record tuple to a serializable node dict.
+
+    Note: We intentionally do not include `old_id` here; JSON consumers should
+    receive `sosa` instead of the legacy `old_id` value.
+    """
     # record expected form (db_id, old_id, canonical_name, date_of_birth, birth_location, birth_comment, date_of_death, death_location, death_comment, marriage_date, marriage_location, marriage_comment, ...)
     node = {
         'db_id': record[0],
-        'old_id': record[1],
         'name': record[2],
         'date_of_birth': record[3],
         'birth_location': record[4],
@@ -184,13 +187,18 @@ def _record_to_node(record: tuple, family_tree: Optional[str] = None) -> Dict:
         'marriage_location': record[10],
         'marriage_comment': record[11],
         'family_tree': family_tree,
-        'children': []
+        'sosa': None,
+        'children': [],
     }
     return node
 
 
-def build_ancestor_tree(conn: sqlite3.Connection, individual_id: int, family_tree: Optional[str], max_depth: int = 10, visited: Optional[Set[int]] = None, depth: int = 0) -> Optional[Dict]:
-    """Build an ancestor tree (parents are in `children` list) as nested dicts."""
+def build_ancestor_tree(conn: sqlite3.Connection, individual_id: int, family_tree: Optional[str], max_depth: int = 10, visited: Optional[Set[int]] = None, depth: int = 0, sosa_number: int = 1) -> Optional[Dict]:
+    """Build an ancestor tree (parents are in `children` list) as nested dicts.
+
+    Each node will include a `sosa` number (Sosa-Stradonitz). The root has
+    `sosa=1`, father = 2N, mother = 2N+1.
+    """
     if visited is None:
         visited = set()
     if individual_id in visited or depth > max_depth:
@@ -212,6 +220,7 @@ def build_ancestor_tree(conn: sqlite3.Connection, individual_id: int, family_tre
         return None
 
     node = _record_to_node(result, family_tree)
+    node['sosa'] = sosa_number
 
     parents = get_parents(conn, individual_id, family_tree)
 
@@ -227,9 +236,9 @@ def build_ancestor_tree(conn: sqlite3.Connection, individual_id: int, family_tre
         for other_id, other_tree in other_instances:
             parents = get_parents(conn, other_id, other_tree)
             if parents:
-                # switch to other instance
+                # switch to other instance, preserve sosa numbering
                 node_other = build_ancestor_tree(
-                    conn, other_id, other_tree, max_depth, visited, depth)
+                    conn, other_id, other_tree, max_depth, visited, depth, sosa_number)
                 return node_other
 
     if parents:
@@ -243,17 +252,17 @@ def build_ancestor_tree(conn: sqlite3.Connection, individual_id: int, family_tre
             else:
                 mother = p
 
-        parents_to_add = []
+        parents_to_add: List[tuple] = []
         if mother:
-            parents_to_add.append(mother)
+            parents_to_add.append((mother, sosa_number * 2 + 1))
         if father:
-            parents_to_add.append(father)
+            parents_to_add.append((father, sosa_number * 2))
 
-        for p in parents_to_add:
+        for p, parent_sosa in parents_to_add:
             parent_id = p[0]
             parent_tree = p[13] if len(p) > 13 else None
             child_node = build_ancestor_tree(
-                conn, parent_id, parent_tree or family_tree, max_depth, visited, depth + 1)
+                conn, parent_id, parent_tree or family_tree, max_depth, visited, depth + 1, parent_sosa)
             if child_node:
                 node['children'].append(child_node)
 
@@ -283,6 +292,8 @@ def build_descendant_tree(conn: sqlite3.Connection, individual_id: int, family_t
         return None
 
     node = _record_to_node(result, family_tree)
+    # Descendant trees do not use Sosa numbering; explicitly set to None
+    node['sosa'] = None
 
     children = get_children(conn, individual_id, family_tree)
 
