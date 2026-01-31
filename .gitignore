@@ -1,7 +1,6 @@
 # Local data and databases
 /data
 /tmp
-/local_import_data.sh
 *.db
 *.sqlite
 *.sqlite3
