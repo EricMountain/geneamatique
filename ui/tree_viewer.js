@@ -1,12 +1,9 @@
-// D3 v7 tree viewer with pan/zoom support.
-// Expects a JSON file `demo_tree.json` in the same directory.
+// ELKjs tree viewer with D3 rendering and pan/zoom support.
+const elk = new ELK();
 
 const margin = { top: 40, right: 40, bottom: 40, left: 40 };
 let width = window.innerWidth - margin.left - margin.right;
 let height = window.innerHeight - margin.top - margin.bottom;
-
-const dx = 20;
-let dy = Math.max(width / 8, 200); // dynamic dy based on viewport
 
 const svg = d3.select('#chart').append('svg')
     .attr('width', width + margin.left + margin.right)
@@ -28,6 +25,10 @@ svg.on('mousedown', () => svg.classed('grabbing', true));
 svg.on('mouseup', () => svg.classed('grabbing', false));
 svg.on('mouseleave', () => svg.classed('grabbing', false));
 
+// State to track expanded nodes
+const expandedNodes = new Set();
+let rootData = null;
+
 // Helper to format details for display
 function formatDetails(d) {
     const lines = [];
@@ -40,115 +41,185 @@ function formatDetails(d) {
     return lines;
 }
 
-// Calculate approximate text width (rough estimate in pixels)
+// Calculate approximate text width
 function estimateTextWidth(text, fontSize = 12) {
-    const charWidth = fontSize * 0.5; // Rough estimate: char width ~ half font size
-    return text.length * charWidth + 16; // Add padding
+    const charWidth = fontSize * 0.55;
+    return text.length * charWidth + 20;
 }
 
-// Calculate node dimensions based on content
+// Calculate node dimensions
 function calculateNodeDimensions(d) {
+    const isExpanded = expandedNodes.has(d.db_id);
     const details = formatDetails(d);
     const name = d.name || '';
     let maxWidth = estimateTextWidth(name, 13);
-    details.forEach(detail => {
-        maxWidth = Math.max(maxWidth, estimateTextWidth(detail, 10));
-    });
-    const height = 24 + details.length * 11;
-    return { width: Math.max(80, maxWidth), height, detailCount: details.length };
+
+    if (isExpanded) {
+        details.forEach(detail => {
+            maxWidth = Math.max(maxWidth, estimateTextWidth(detail, 10));
+        });
+    }
+
+    const baseHeight = 24;
+    const height = isExpanded ? baseHeight + details.length * 11 : baseHeight;
+    return { width: Math.max(100, maxWidth), height };
 }
 
-function render(data) {
-    const root = d3.hierarchy(data);
+async function render() {
+    if (!rootData) return;
 
-    // Pre-calculate all node dimensions
-    const nodeDimensions = new Map();
-    root.descendants().forEach(node => {
-        nodeDimensions.set(node.data.db_id, calculateNodeDimensions(node.data));
-    });
+    // Build ELK graph structure
+    const elkNodes = [];
+    const elkEdges = [];
 
-    // Calculate max width to determine horizontal spacing
-    let maxNodeWidth = 80;
-    nodeDimensions.forEach(dims => {
-        maxNodeWidth = Math.max(maxNodeWidth, dims.width);
-    });
+    function traverse(node) {
+        const dims = calculateNodeDimensions(node);
+        elkNodes.push({
+            id: String(node.db_id),
+            width: dims.width,
+            height: dims.height,
+            data: node
+        });
 
-    // Adjust dy to provide enough space for wide nodes (prevent horizontal overlaps)
-    dy = Math.max(width / 8, 200, maxNodeWidth + 60);
+        if (node.children) {
+            node.children.forEach(child => {
+                elkEdges.push({
+                    id: `e${node.db_id}-${child.db_id}`,
+                    sources: [String(node.db_id)],
+                    targets: [String(child.db_id)]
+                });
+                traverse(child);
+            });
+        }
+    }
 
-    const treeLayout = d3.tree().nodeSize([dx, dy]);
-    treeLayout(root);
+    traverse(rootData);
 
-    const nodes = root.descendants();
-    const links = root.links();
-
-    // Draw links first (behind nodes)
-    g.selectAll('.link').data(links).join('path')
-        .attr('class', 'link')
-        .attr('d', d3.linkHorizontal().x(d => d.y).y(d => d.x));
-
-    // Draw nodes as expandable rectangles
-    const nodeGroups = g.selectAll('.node').data(nodes, d => d.data.db_id).join('g')
-        .attr('class', 'node')
-        .attr('transform', d => `translate(${d.y},${d.x})`);
-
-    // Add background rectangle with calculated dimensions
-    nodeGroups.append('rect')
-        .attr('width', d => {
-            const dims = nodeDimensions.get(d.data.db_id);
-            return dims ? dims.width : 80;
-        })
-        .attr('height', 24)
-        .attr('x', d => {
-            const dims = nodeDimensions.get(d.data.db_id);
-            return dims ? -dims.width / 2 : -40;
-        })
-        .attr('y', -12);
-
-    // Add name label (always visible)
-    nodeGroups.append('text')
-        .attr('class', 'name')
-        .attr('text-anchor', 'middle')
-        .attr('dy', '0.35em')
-        .text(d => d.data.name);
-
-    // Add detail lines (collapsed by default)
-    const detailData = (d) => {
-        const details = formatDetails(d.data);
-        return details.map((text, i) => ({ text, index: i }));
+    const graph = {
+        id: "root",
+        layoutOptions: {
+            'elk.algorithm': 'layered',
+            'elk.direction': 'RIGHT',
+            'elk.layered.spacing.nodeNodeLayered': '40',
+            'elk.spacing.nodeNode': '20',
+            'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX'
+        },
+        children: elkNodes,
+        edges: elkEdges
     };
 
-    nodeGroups.selectAll('.detail-text').remove(); // Clear old details
+    const layout = await elk.layout(graph);
 
-    nodeGroups.selectAll('.detail-text')
-        .data(d => detailData(d), d => d.index)
-        .join('text')
-        .attr('class', 'details')
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '9px')
-        .attr('y', (d, i) => 12 + i * 11)
-        .text(d => d.text);
+    // Update Links
+    const linkData = layout.edges || [];
+    const links = g.selectAll('.link').data(linkData, d => d.id);
 
-    // Add hover interaction
-    nodeGroups.on('mouseenter', function () {
-        d3.select(this).classed('expanded', true);
-        const node = d3.select(this).datum();
-        const dims = nodeDimensions.get(node.data.db_id);
-        const details = formatDetails(node.data);
-        const newHeight = Math.max(24, 24 + details.length * 11);
+    links.exit().remove();
 
-        d3.select(this).select('rect')
-            .transition().duration(200)
-            .attr('height', newHeight)
-            .attr('y', -newHeight / 2);
-    })
-        .on('mouseleave', function () {
-            d3.select(this).classed('expanded', false);
-            d3.select(this).select('rect')
-                .transition().duration(200)
-                .attr('height', 24)
-                .attr('y', -12);
+    links.enter().append('path')
+        .attr('class', 'link')
+        .merge(links)
+        .transition().duration(400)
+        .attr('d', d => {
+            const s = d.sections[0];
+            const start = s.startPoint;
+            const end = s.endPoint;
+
+            if (s.bendPoints && s.bendPoints.length > 0) {
+                // Create smooth cubic bezier curve through bend points
+                let path = `M${start.x},${start.y}`;
+                const points = [start, ...s.bendPoints, end];
+
+                for (let i = 0; i < points.length - 1; i++) {
+                    const p0 = points[i];
+                    const p1 = points[i + 1];
+                    const mx = (p0.x + p1.x) / 2;
+                    const my = (p0.y + p1.y) / 2;
+
+                    if (i === 0) {
+                        path += ` Q${p0.x},${p0.y} ${mx},${my}`;
+                    } else if (i === points.length - 2) {
+                        path += ` Q${p1.x},${p1.y} ${p1.x},${p1.y}`;
+                    } else {
+                        path += ` Q${p0.x},${p0.y} ${mx},${my}`;
+                    }
+                }
+                return path;
+            } else {
+                // Simple horizontal bezier curve
+                const mx = (start.x + end.x) / 2;
+                return `M${start.x},${start.y} C${mx},${start.y} ${mx},${end.y} ${end.x},${end.y}`;
+            }
         });
+
+    // Update Nodes
+    const nodes = g.selectAll('.node').data(layout.children, d => d.id);
+
+    const nodeEnter = nodes.enter().append('g')
+        .attr('class', 'node')
+        .attr('transform', d => `translate(${d.x},${d.y})`);
+
+    nodeEnter.append('rect')
+        .attr('rx', 4)
+        .attr('ry', 4);
+
+    nodeEnter.append('text')
+        .attr('class', 'name')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '16px');
+
+    const nodeUpdate = nodeEnter.merge(nodes);
+
+    nodeUpdate.classed('expanded', d => expandedNodes.has(d.data.db_id));
+
+    nodeUpdate.transition().duration(400)
+        .attr('transform', d => `translate(${d.x},${d.y})`);
+
+    nodeUpdate.select('rect')
+        .transition().duration(400)
+        .attr('width', d => d.width)
+        .attr('height', d => d.height);
+
+    nodeUpdate.select('.name')
+        .transition().duration(400)
+        .attr('x', d => d.width / 2)
+        .text(d => d.data.name);
+
+    // Details
+    nodeUpdate.each(function (d) {
+        const nodeGroup = d3.select(this);
+        const isExpanded = expandedNodes.has(d.data.db_id);
+        const details = isExpanded ? formatDetails(d.data) : [];
+
+        const detailTexts = nodeGroup.selectAll('.details').data(details, (text, i) => i);
+
+        detailTexts.exit().remove();
+
+        detailTexts.enter().append('text')
+            .attr('class', 'details')
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '10px')
+            .merge(detailTexts)
+            .attr('x', d.width / 2)
+            .attr('y', (text, i) => 38 + i * 11)
+            .text(text => text);
+    });
+
+    // Interaction
+    nodeUpdate.on('mouseenter', function (event, d) {
+        if (!expandedNodes.has(d.data.db_id)) {
+            expandedNodes.add(d.data.db_id);
+            render(); // Re-layout
+        }
+    })
+        .on('mouseleave', function (event, d) {
+            if (expandedNodes.has(d.data.db_id)) {
+                expandedNodes.delete(d.data.db_id);
+                render(); // Re-layout
+            }
+        });
+
+    nodes.exit().remove();
 }
 
 // Handle window resize
@@ -159,10 +230,13 @@ window.addEventListener('resize', () => {
         .attr('height', height + margin.top + margin.bottom);
 });
 
-// Load and render demo JSON
+// Load and render
 fetch('demo_tree.json')
     .then(r => r.json())
-    .then(render)
+    .then(data => {
+        rootData = data;
+        render();
+    })
     .catch(err => {
         d3.select('#chart').append('p')
             .style('color', 'red')
