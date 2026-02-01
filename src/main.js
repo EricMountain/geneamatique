@@ -49,10 +49,9 @@ script.onload = () => {
     }
 
     async function fetchTreeFor(id) {
-        const type = document.getElementById('tree-type').value;
-        const maxDepth = document.getElementById('max-depth').value || 6;
         try {
-            const res = await fetch(`/api/tree?id=${encodeURIComponent(id)}&type=${encodeURIComponent(type)}&max_depth=${encodeURIComponent(maxDepth)}`);
+            // API now serves only ancestor trees; no type or max_depth query params
+            const res = await fetch(`/api/tree?id=${encodeURIComponent(id)}`);
             if (!res.ok) {
                 const txt = await res.text();
                 window.showTreeError('Server error: ' + txt);

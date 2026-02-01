@@ -177,12 +177,15 @@ exports.handler = async function (event) {
         if (reqPath.startsWith('/api/tree')) {
             const params = event.queryStringParameters || {};
             const id = params.id ? parseInt(params.id, 10) : NaN;
-            const type = params.type || 'ancestor';
             const family_tree = params.family_tree || null;
-            const max_depth = params.max_depth ? parseInt(params.max_depth, 10) : 10;
+            // The API no longer accepts a 'type' or 'max_depth' parameter. Ancestor trees only.
+            if (params.type && params.type !== 'ancestor') {
+                return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'descendant trees not supported' }) };
+            }
             if (isNaN(id)) return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'missing or invalid id' }) };
 
             const db = dbOpen();
+            const max_depth = process.env.GENEALOGY_MAX_DEPTH ? parseInt(process.env.GENEALOGY_MAX_DEPTH, 10) : 10;
 
             const recordToNode = (row, family_tree) => ({
                 db_id: row.id,
@@ -219,21 +222,6 @@ exports.handler = async function (event) {
                     const rows = await dbAll(db, `SELECT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type as relationship_type, r.family_tree as family_tree
                         FROM relationships r JOIN individuals i ON r.parent_id = i.id JOIN individual_tree_instances iti ON i.id = iti.individual_id
                         WHERE r.child_id = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`, [individual_id]);
-                    return rows;
-                }
-            };
-
-            const getChildren = async (individual_id, fam_tree) => {
-                if (fam_tree) {
-                    let rows = await dbAll(db, `SELECT DISTINCT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree as family_tree
-                        FROM relationships r JOIN individuals i ON r.child_id = i.id JOIN individual_tree_instances iti ON i.id = iti.individual_id AND iti.family_tree = ? WHERE r.parent_id = ? AND r.family_tree = ? ORDER BY iti.old_id`, [fam_tree, individual_id, fam_tree]);
-                    if (rows && rows.length) return rows;
-                    rows = await dbAll(db, `SELECT DISTINCT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree as family_tree
-                        FROM relationships r JOIN individuals i ON r.child_id = i.id JOIN individual_tree_instances iti ON i.id = iti.individual_id WHERE r.parent_id = ? ORDER BY iti.old_id`, [individual_id]);
-                    return rows;
-                } else {
-                    const rows = await dbAll(db, `SELECT DISTINCT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree as family_tree
-                        FROM relationships r JOIN individuals i ON r.child_id = i.id JOIN individual_tree_instances iti ON i.id = iti.individual_id WHERE r.parent_id = ? ORDER BY iti.old_id`, [individual_id]);
                     return rows;
                 }
             };
@@ -284,43 +272,9 @@ exports.handler = async function (event) {
                 return node;
             };
 
-            const buildDescendant = async (individual_id, fam_tree, maxDepth, visited = new Set(), depth = 0) => {
-                if (visited.has(individual_id) || depth > maxDepth) return null;
-                visited.add(individual_id);
-                let row = await dbGet(db, `SELECT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment
-                    FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id WHERE i.id = ? AND iti.family_tree = ?`, [individual_id, fam_tree]);
-                if (!row) {
-                    row = await dbGet(db, `SELECT i.id as id, iti.family_tree as family_tree, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment
-                        FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id WHERE i.id = ? LIMIT 1`, [individual_id]);
-                    if (!row) return null;
-                }
-                const node = recordToNode(row, fam_tree);
-                node.sosa = null;
-
-                let children = await getChildren(individual_id, fam_tree);
-                if ((!children || !children.length) && node.date_of_birth && node.name) {
-                    const others = await dbAll(db, `SELECT DISTINCT i.id as id, iti.family_tree as family_tree FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?`, [node.name, node.date_of_birth, individual_id]);
-                    for (const o of others) {
-                        children = await getChildren(o.id, o.family_tree);
-                        if (children && children.length) break;
-                    }
-                }
-                if (children && children.length) {
-                    for (const c of children) {
-                        const childNode = await buildDescendant(c.id, c.family_tree || fam_tree, maxDepth, visited, depth + 1);
-                        if (childNode) node.children.push(childNode);
-                    }
-                }
-                return node;
-            };
-
             try {
-                let tree;
-                if (type === 'descendant') {
-                    tree = await buildDescendant(id, family_tree, max_depth);
-                } else {
-                    tree = await buildAncestor(id, family_tree, max_depth);
-                }
+                // Always build ancestor tree (descendants not supported anymore)
+                const tree = await buildAncestor(id, family_tree, max_depth);
                 db.close();
                 if (!tree) return { statusCode: 404, headers: jsonHeaders, body: JSON.stringify({ error: 'not found' }) };
                 return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify(tree) };
