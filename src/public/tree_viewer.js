@@ -32,7 +32,38 @@ function genderForData(d) {
     return 'unknown';
 }
 
-function genderColor(d) { return GENDER_COLORS[genderForData(d)]; }
+// Theme detection: check forced data-theme first, fall back to prefers-color-scheme
+function isDarkTheme() {
+    const forced = document.documentElement.getAttribute('data-theme');
+    if (forced === 'dark' || forced === 'light') return forced === 'dark';
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+// Return colours, but invert foreground/background in dark mode
+function genderColor(d) {
+    const base = GENDER_COLORS[genderForData(d)];
+    if (isDarkTheme()) {
+        return { accent: base.accent, fill: base.text, text: base.fill };
+    }
+    return base;
+}
+
+// Re-render when theme changes: watch attribute changes on root and matchMedia changes
+const themeObserver = new MutationObserver(mutations => {
+    for (const m of mutations) {
+        if (m.type === 'attributes' && m.attributeName === 'data-theme') {
+            render();
+            return;
+        }
+    }
+});
+
+themeObserver.observe(document.documentElement, { attributes: true });
+
+if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', () => render()); else mq.addListener(() => render());
+}
 
 // Add zoom behavior
 const zoom = d3.zoom()
