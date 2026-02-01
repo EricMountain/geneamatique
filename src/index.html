@@ -22,6 +22,7 @@
         }
 
         #chart {
+            position: relative;
             width: calc(100% - 20px);
             height: calc(100% - 20px);
             margin: 10px;
@@ -38,6 +39,41 @@
 
         svg.grabbing {
             cursor: grabbing;
+        }
+
+        /* Small inline spinner used near the search button */
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ddd;
+            border-top-color: #333;
+            border-radius: 50%;
+            display: inline-block;
+            vertical-align: middle;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Full-chart overlay spinner */
+        .chart-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.95);
+            border-radius: 6px;
+            padding: 12px 16px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            font-size: 14px;
+            color: #333;
+            z-index: 500;
         }
 
         .link {

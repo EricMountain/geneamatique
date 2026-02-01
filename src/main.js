@@ -12,6 +12,51 @@ script.onload = () => {
     const input = document.getElementById('person-search');
     const btn = document.getElementById('search-btn');
     const results = document.getElementById('search-results');
+    
+    // Create lightweight spinner elements (added to DOM if not present)
+    let searchSpinner = document.getElementById('search-spinner');
+    if (!searchSpinner) {
+        searchSpinner = document.createElement('span');
+        searchSpinner.id = 'search-spinner';
+        searchSpinner.className = 'spinner';
+        searchSpinner.style.display = 'none';
+        btn.parentNode.insertBefore(searchSpinner, btn.nextSibling);
+    }
+
+    let chartSpinner = document.getElementById('chart-spinner');
+    const chart = document.getElementById('chart');
+    if (!chartSpinner) {
+        chartSpinner = document.createElement('div');
+        chartSpinner.id = 'chart-spinner';
+        chartSpinner.className = 'chart-spinner';
+        chartSpinner.style.display = 'none';
+        chartSpinner.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px"></span><span>Loading…</span>';
+        chart.appendChild(chartSpinner);
+    }
+
+    function setSearchLoading(loading) {
+        if (loading) {
+            searchSpinner.style.display = 'inline-block';
+            btn.disabled = true;
+        } else {
+            searchSpinner.style.display = 'none';
+            btn.disabled = false;
+        }
+    }
+
+    function setChartLoading(loading) {
+        if (loading) {
+            chartSpinner.style.display = 'flex';
+            // also hide results to reduce flicker
+            results.style.display = 'none';
+            btn.disabled = true;
+            input.disabled = true;
+        } else {
+            chartSpinner.style.display = 'none';
+            btn.disabled = false;
+            input.disabled = false;
+        }
+    }
 
     function showResults(list) {
         results.innerHTML = '';
@@ -38,6 +83,7 @@ script.onload = () => {
     }
 
     async function searchIndividuals(q) {
+        setSearchLoading(true);
         try {
             const res = await fetch('/api/individuals?q=' + encodeURIComponent(q));
             if (!res.ok) throw new Error(await res.text());
@@ -45,10 +91,13 @@ script.onload = () => {
         } catch (err) {
             console.warn('Search failed', err);
             return [];
+        } finally {
+            setSearchLoading(false);
         }
     }
 
     async function fetchTreeFor(id) {
+        setChartLoading(true);
         try {
             // API now serves only ancestor trees; no type or max_depth query params
             const res = await fetch(`/api/tree?id=${encodeURIComponent(id)}`);
@@ -71,6 +120,8 @@ script.onload = () => {
             }
         } catch (err) {
             window.showTreeError('Failed to fetch tree: ' + err.message);
+        } finally {
+            setChartLoading(false);
         }
     }
 
