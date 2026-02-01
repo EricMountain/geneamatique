@@ -5,6 +5,7 @@
     "main": "handler.js",
     "dependencies": {
         "@aws-sdk/client-dynamodb": "^3.500.0",
-        "mime-types": "^2.1.35"
+        "mime-types": "^2.1.35",
+        "sqlite3": "^5.1.6"
     }
 }

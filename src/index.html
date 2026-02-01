@@ -94,7 +94,20 @@
 </head>
 
 <body>
+    <div id="controls" style="padding:10px; display:flex; gap:8px; align-items:center; background:#fff; border-bottom:1px solid #eee;">
+        <input id="person-search" placeholder="Search person by name or id" style="flex:1; padding:8px;" />
+        <select id="tree-type" title="Tree type" style="padding:8px;">
+            <option value="ancestor">Ancestors (SOSA)</option>
+            <option value="descendant">Descendants</option>
+        </select>
+        <input id="max-depth" type="number" min="1" max="20" value="6" style="width:70px; padding:8px;" />
+        <button id="search-btn" style="padding:8px 12px;">Search</button>
+    </div>
+
     <div id="chart"></div>
+
+    <div id="search-results" style="position:fixed; top:62px; left:10px; right:10px; max-height:200px; overflow:auto; display:none; background:#fff; border:1px solid #ddd; box-shadow:0 2px 6px rgba(0,0,0,0.08); z-index:1000;">
+    </div>
 
     <!-- d3 and elk are expected by ui/tree_viewer.js -->
     <script src="https://d3js.org/d3.v7.min.js"></script>

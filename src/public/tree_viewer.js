@@ -341,16 +341,19 @@ window.addEventListener('resize', () => {
         .attr('height', height + margin.top + margin.bottom);
 });
 
-// Load and render
-fetch('demo_tree.json')
-    .then(r => r.json())
-    .then(data => {
-        rootData = data;
-        render();
-    })
-    .catch(err => {
-        d3.select('#chart').append('p')
-            .style('color', 'red')
-            .style('padding', '20px')
-            .text('Failed to load demo_tree.json: ' + err.message);
-    });
+// Provide API for external code to set the tree root and to show errors
+window.setTreeRoot = function (data) {
+    rootData = data;
+    render();
+};
+
+window.showTreeError = function (msg) {
+    d3.select('#chart').selectAll('*').remove();
+    d3.select('#chart').append('p')
+        .style('color', 'red')
+        .style('padding', '20px')
+        .text(msg);
+};
+
+// Note: The PWA should call `fetch('/api/tree?...')` to get a generated tree JSON
+// and then call `setTreeRoot(data)` to render it.
