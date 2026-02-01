@@ -63,6 +63,12 @@ script.onload = () => {
                 return;
             }
             window.setTreeRoot(data);
+            // Persist last successful id so we can rehydrate the last view on reload
+            try {
+                localStorage.setItem('last_db_id', String(id));
+            } catch (err) {
+                // ignore storage errors (e.g., private mode)
+            }
         } catch (err) {
             window.showTreeError('Failed to fetch tree: ' + err.message);
         }
@@ -74,6 +80,8 @@ script.onload = () => {
         const list = await searchIndividuals(q);
         if (list.length === 1) {
             fetchTreeFor(list[0].id);
+        } else if (list.length === 0) {
+            showNoMatches(q);
         } else {
             showResults(list);
         }
@@ -83,8 +91,130 @@ script.onload = () => {
         const q = input.value.trim();
         if (!q) { results.style.display = 'none'; return; }
         const list = await searchIndividuals(q);
-        showResults(list);
+        if (list.length === 0) {
+            showNoMatches(q);
+        } else {
+            showResults(list);
+        }
     });
+
+    // Show friendly UI when no matches are found for a query. Also offer "Show similar" suggestions
+    async function showNoMatches(q) {
+        results.innerHTML = '';
+        const msg = document.createElement('div');
+        msg.style.padding = '12px';
+        msg.style.color = '#555';
+        msg.innerHTML = `<div style="font-weight:600; margin-bottom:6px;">No matches found for “${q}”.</div>`;
+
+        const tips = document.createElement('div');
+        tips.style.marginBottom = '8px';
+        tips.style.fontSize = '13px';
+        tips.innerHTML = `Try adjusting the name, searching by ID, or click <strong>Show similar</strong> to see close matches.`;
+        msg.appendChild(tips);
+
+        const actions = document.createElement('div');
+        actions.style.display = 'flex';
+        actions.style.gap = '8px';
+
+        const btnSimilar = document.createElement('button');
+        btnSimilar.textContent = 'Show similar';
+        btnSimilar.onclick = async () => {
+            btnSimilar.disabled = true;
+            btnSimilar.textContent = 'Searching...';
+            const suggestions = await gatherSimilar(q);
+            btnSimilar.disabled = false;
+            btnSimilar.textContent = 'Show similar';
+            if (suggestions && suggestions.length) {
+                showResults(suggestions);
+            } else {
+                results.innerHTML = '';
+                const none = document.createElement('div');
+                none.style.padding = '12px';
+                none.textContent = 'No similar matches found.';
+                results.appendChild(none);
+                results.style.display = 'block';
+            }
+        };
+        actions.appendChild(btnSimilar);
+
+        const btnById = document.createElement('button');
+        btnById.textContent = 'Search by ID';
+        btnById.onclick = async () => {
+            const id = prompt('Enter the DB id to fetch:');
+            if (!id) return;
+            fetchTreeFor(id);
+            results.style.display = 'none';
+        };
+        actions.appendChild(btnById);
+
+        const btnClear = document.createElement('button');
+        btnClear.textContent = 'Clear';
+        btnClear.onclick = () => {
+            input.value = '';
+            input.focus();
+            results.style.display = 'none';
+        };
+        actions.appendChild(btnClear);
+
+        msg.appendChild(actions);
+        results.appendChild(msg);
+        results.style.display = 'block';
+    }
+
+    // Attempt to find similar matches by tokenizing the query and searching tokens individually
+    async function gatherSimilar(q) {
+        const tokens = q.split(/\s+/).filter(Boolean);
+        const seen = new Map();
+        for (const t of tokens) {
+            try {
+                const sub = await searchIndividuals(t);
+                sub.forEach(it => {
+                    if (!seen.has(it.id)) seen.set(it.id, it);
+                });
+            } catch (err) {
+                // ignore token errors
+            }
+        }
+        // Also try fuzzy single-character edits (simple heuristic): drop one character and search
+        if (tokens.length === 1 && tokens[0].length > 3) {
+            const s = tokens[0];
+            for (let i = 0; i < Math.min(3, s.length - 2); i++) {
+                const edit = s.slice(0, i) + s.slice(i + 1);
+                try {
+                    const sub = await searchIndividuals(edit);
+                    sub.forEach(it => { if (!seen.has(it.id)) seen.set(it.id, it); });
+                } catch (err) { }
+            }
+        }
+        return Array.from(seen.values()).slice(0, 50);
+    }
+
+    // If the input had a value on page load, run the search automatically. If it matches one
+    // record, fetch and display the tree; if multiple, show the results; if none, show the
+    // friendly "no matches" UI. Also, if no input is provided but a last-db-id was stored,
+    // rehydrate the last view automatically.
+    (async () => {
+        const initialQ = input.value.trim();
+        if (initialQ) {
+            const list = await searchIndividuals(initialQ);
+            if (list.length === 1) {
+                fetchTreeFor(list[0].id);
+            } else if (list.length === 0) {
+                showNoMatches(initialQ);
+            } else {
+                showResults(list);
+            }
+        } else {
+            const last = localStorage.getItem('last_db_id');
+            if (last) {
+                try {
+                    fetchTreeFor(last);
+                } catch (err) {
+                    // ignore
+                }
+            }
+        }
+    })();
 
 };
 

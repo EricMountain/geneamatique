@@ -27,6 +27,7 @@ svg.on('mouseleave', () => svg.classed('grabbing', false));
 
 // State to track expanded nodes
 const expandedNodes = new Set();
+const hoverTimers = new Map(); // db_id -> timeout id for delayed hover expand
 let rootData = null;
 
 // Helper to format details for display
@@ -318,20 +319,45 @@ async function render() {
     });
 
     // Interaction
-    // Expand on hover; do NOT collapse on mouseleave so transient layout shifts won't close the bubble.
+    // Expand on hover after a short delay; do NOT collapse on mouseleave so transient layout shifts won't close the bubble.
     // Collapse/toggle when the user explicitly clicks the node.
     nodeUpdate.on('mouseenter', function (event, d) {
-        if (!expandedNodes.has(d.data.db_id)) {
-            expandedNodes.add(d.data.db_id);
-            render(); // Re-layout
+        const id = d.data.db_id;
+        // If already expanded, nothing to do
+        if (expandedNodes.has(id)) return;
+        // Clear any previous timer for this node
+        if (hoverTimers.has(id)) {
+            clearTimeout(hoverTimers.get(id));
+            hoverTimers.delete(id);
         }
+        // Schedule delayed expand (150ms) to ignore brief skims
+        const t = setTimeout(() => {
+            expandedNodes.add(id);
+            hoverTimers.delete(id);
+            render(); // Re-layout
+        }, 150);
+        hoverTimers.set(id, t);
     })
+        .on('mouseleave', function (event, d) {
+            // Cancel pending hover expand if the user moved away quickly
+            const id = d.data.db_id;
+            if (hoverTimers.has(id)) {
+                clearTimeout(hoverTimers.get(id));
+                hoverTimers.delete(id);
+            }
+        })
         .on('click', function (event, d) {
+            const id = d.data.db_id;
+            // Cancel any pending hover expand to avoid races
+            if (hoverTimers.has(id)) {
+                clearTimeout(hoverTimers.get(id));
+                hoverTimers.delete(id);
+            }
             // Toggle expanded state on click
-            if (expandedNodes.has(d.data.db_id)) {
-                expandedNodes.delete(d.data.db_id);
+            if (expandedNodes.has(id)) {
+                expandedNodes.delete(id);
             } else {
-                expandedNodes.add(d.data.db_id);
+                expandedNodes.add(id);
             }
             render(); // Re-layout
         });
