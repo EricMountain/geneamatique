@@ -178,10 +178,6 @@ exports.handler = async function (event) {
             const params = event.queryStringParameters || {};
             const id = params.id ? parseInt(params.id, 10) : NaN;
             const family_tree = params.family_tree || null;
-            // The API no longer accepts a 'type' or 'max_depth' parameter. Ancestor trees only.
-            if (params.type && params.type !== 'ancestor') {
-                return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'descendant trees not supported' }) };
-            }
             if (isNaN(id)) return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'missing or invalid id' }) };
 
             const db = dbOpen();
