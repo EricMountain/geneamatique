@@ -18,7 +18,7 @@ def find_individual(conn: sqlite3.Connection, search_term: str, family_tree: Opt
     try:
         old_id = int(search_term)
         query = """
-            SELECT DISTINCT i.id, iti.family_tree, iti.old_id, i.canonical_name, 
+            SELECT DISTINCT i.id, iti.family_tree, iti.old_id, i.canonical_name, i.name_comment,
                    i.date_of_birth, i.birth_location, i.birth_comment,
                    i.date_of_death, i.death_location, i.death_comment,
                    i.marriage_date, i.marriage_location, i.marriage_comment
@@ -34,7 +34,7 @@ def find_individual(conn: sqlite3.Connection, search_term: str, family_tree: Opt
         cursor.execute(query, params)
     except ValueError:
         query = """
-            SELECT DISTINCT i.id, iti.family_tree, iti.old_id, i.canonical_name,
+            SELECT DISTINCT i.id, iti.family_tree, iti.old_id, i.canonical_name, i.name_comment,
                    i.date_of_birth, i.birth_location, i.birth_comment,
                    i.date_of_death, i.death_location, i.death_comment,
                    i.marriage_date, i.marriage_location, i.marriage_comment
@@ -58,7 +58,7 @@ def get_parents(conn: sqlite3.Connection, individual_id: int, family_tree: Optio
 
     if family_tree:
         cursor.execute("""
-            SELECT i.id, iti.old_id, i.canonical_name, 
+            SELECT i.id, iti.old_id, i.canonical_name, i.name_comment,
                    i.date_of_birth, i.birth_location, i.birth_comment,
                    i.date_of_death, i.death_location, i.death_comment,
                    i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, iti.family_tree
@@ -74,7 +74,7 @@ def get_parents(conn: sqlite3.Connection, individual_id: int, family_tree: Optio
             return results
 
         cursor.execute("""
-            SELECT i.id, iti.old_id, i.canonical_name, 
+            SELECT i.id, iti.old_id, i.canonical_name, i.name_comment,
                    i.date_of_birth, i.birth_location, i.birth_comment,
                    i.date_of_death, i.death_location, i.death_comment,
                    i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, r.family_tree
@@ -87,7 +87,7 @@ def get_parents(conn: sqlite3.Connection, individual_id: int, family_tree: Optio
         """, (individual_id,))
     else:
         cursor.execute("""
-            SELECT i.id, iti.old_id, i.canonical_name, 
+            SELECT i.id, iti.old_id, i.canonical_name, i.name_comment,
                    i.date_of_birth, i.birth_location, i.birth_comment,
                    i.date_of_death, i.death_location, i.death_comment,
                    i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type, r.family_tree
@@ -108,7 +108,7 @@ def get_children(conn: sqlite3.Connection, individual_id: int, family_tree: Opti
 
     if family_tree:
         cursor.execute("""
-            SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
+            SELECT DISTINCT i.id, iti.old_id, i.canonical_name, i.name_comment,
                    i.date_of_birth, i.birth_location, i.birth_comment,
                    i.date_of_death, i.death_location, i.death_comment,
                    i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree
@@ -135,7 +135,7 @@ def get_children(conn: sqlite3.Connection, individual_id: int, family_tree: Opti
         """, (individual_id,))
     else:
         cursor.execute("""
-            SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
+            SELECT DISTINCT i.id, iti.old_id, i.canonical_name, i.name_comment,
                    i.date_of_birth, i.birth_location, i.birth_comment,
                    i.date_of_death, i.death_location, i.death_comment,
                    i.marriage_date, i.marriage_location, i.marriage_comment, r.family_tree
@@ -153,7 +153,7 @@ def get_spouses(conn: sqlite3.Connection, individual_id: int, family_tree: str):
     """Get spouses of an individual based on shared children within a tree."""
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT DISTINCT i.id, iti.old_id, i.canonical_name,
+        SELECT DISTINCT i.id, iti.old_id, i.canonical_name, i.name_comment,
                i.date_of_birth, i.birth_location, i.birth_comment,
                i.date_of_death, i.death_location, i.death_comment,
                i.marriage_date, i.marriage_location, i.marriage_comment
@@ -177,15 +177,16 @@ def _record_to_node(record: tuple, family_tree: Optional[str] = None) -> Dict:
     node = {
         'db_id': record[0],
         'name': record[2],
-        'date_of_birth': record[3],
-        'birth_location': record[4],
-        'birth_comment': record[5],
-        'date_of_death': record[6],
-        'death_location': record[7],
-        'death_comment': record[8],
-        'marriage_date': record[9],
-        'marriage_location': record[10],
-        'marriage_comment': record[11],
+        'name_comment': record[3],
+        'date_of_birth': record[4],
+        'birth_location': record[5],
+        'birth_comment': record[6],
+        'date_of_death': record[7],
+        'death_location': record[8],
+        'death_comment': record[9],
+        'marriage_date': record[10],
+        'marriage_location': record[11],
+        'marriage_comment': record[12],
         'family_tree': family_tree,
         'sosa': None,
         'children': [],
@@ -207,7 +208,7 @@ def build_ancestor_tree(conn: sqlite3.Connection, individual_id: int, family_tre
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT i.id, iti.old_id, i.canonical_name,
+        SELECT i.id, iti.old_id, i.canonical_name, i.name_comment,
                i.date_of_birth, i.birth_location, i.birth_comment,
                i.date_of_death, i.death_location, i.death_comment,
                i.marriage_date, i.marriage_location, i.marriage_comment
@@ -246,7 +247,8 @@ def build_ancestor_tree(conn: sqlite3.Connection, individual_id: int, family_tre
         mother = None
         father = None
         for p in parents:
-            rel_type = p[12] if len(p) > 12 else None
+            # relationship_type and family_tree are returned at the end of the tuple
+            rel_type = p[-2] if len(p) >= 2 else None
             if rel_type == 'father':
                 father = p
             else:
@@ -260,7 +262,7 @@ def build_ancestor_tree(conn: sqlite3.Connection, individual_id: int, family_tre
 
         for p, parent_sosa in parents_to_add:
             parent_id = p[0]
-            parent_tree = p[13] if len(p) > 13 else None
+            parent_tree = p[-1] if len(p) > 0 else None
             child_node = build_ancestor_tree(
                 conn, parent_id, parent_tree or family_tree, max_depth, visited, depth + 1, parent_sosa)
             if child_node:
@@ -279,7 +281,7 @@ def build_descendant_tree(conn: sqlite3.Connection, individual_id: int, family_t
 
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT i.id, iti.old_id, i.canonical_name,
+        SELECT i.id, iti.old_id, i.canonical_name, i.name_comment,
                i.date_of_birth, i.birth_location, i.birth_comment,
                i.date_of_death, i.death_location, i.death_comment,
                i.marriage_date, i.marriage_location, i.marriage_comment
@@ -313,7 +315,7 @@ def build_descendant_tree(conn: sqlite3.Connection, individual_id: int, family_t
     if children:
         for child in children:
             child_id = child[0]
-            child_tree = child[12] if len(child) > 12 else None
+            child_tree = child[-1] if len(child) > 0 else None
             child_node = build_descendant_tree(
                 conn, child_id, child_tree or family_tree, max_depth, visited, depth + 1)
             if child_node:

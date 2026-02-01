@@ -229,7 +229,7 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
         mother = None
 
         for parent in parents:
-            parent_id, parent_old_id, parent_name, parent_dob, parent_birth_loc, parent_birth_comment, parent_dod, parent_death_loc, parent_death_comment, parent_marriage, parent_marriage_loc, parent_marriage_comment, rel_type, parent_family_tree = parent
+            parent_id, parent_old_id, parent_name, parent_name_comment, parent_dob, parent_birth_loc, parent_birth_comment, parent_dod, parent_death_loc, parent_death_comment, parent_marriage, parent_marriage_loc, parent_marriage_comment, rel_type, parent_family_tree = parent
             if rel_type == 'father':
                 father = parent
             else:
@@ -245,7 +245,7 @@ def draw_ancestor_tree(conn, individual_id, family_tree, active_bars=None, is_la
 
         for idx, (parent, parent_sosa) in enumerate(parents_to_draw):
             parent_id = parent[0]
-            parent_family_tree = parent[13]  # Last element is family_tree
+            parent_family_tree = parent[-1]  # Last element is family_tree
             is_last_parent = (idx == len(parents_to_draw) - 1)
 
             draw_ancestor_tree(conn, parent_id, parent_family_tree, active_bars.copy(),
@@ -410,8 +410,8 @@ Examples:
                     "\nPlease specify the ID number or use --family-tree to select a specific tree.")
 
         # Single result - show the tree
-        # Format: individual_id, family_tree, old_id, canonical_name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment
-        individual_id, family_tree, old_id, name, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[
+        # Format: individual_id, family_tree, old_id, canonical_name, name_comment, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment
+        individual_id, family_tree, old_id, name, name_comment, dob, birth_loc, birth_comment, dod, death_loc, death_comment, marriage, marriage_loc, marriage_comment = results[
             0]
 
         if args.descendants:

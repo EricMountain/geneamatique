@@ -77,10 +77,19 @@ class TestTreeUtils(unittest.TestCase):
         self.assertEqual(results[0][3], 'A Person')
 
     def test_build_ancestor_tree(self):
+        # Put a name_comment on the root person and verify it is carried into the node
+        cur = self.conn.cursor()
+        cur.execute("UPDATE individuals SET name_comment = ? WHERE id = ?", ('Note for A', 1))
+        self.conn.commit()
+
         tree = build_ancestor_tree(self.conn, 1, 'T1')
         self.assertIsNotNone(tree, "build_ancestor_tree returned None")
         if tree is not None:
             self.assertEqual(tree['name'], 'A Person')
+            # name_comment should be present and match the DB value
+            self.assertIn('name_comment', tree)
+            self.assertEqual(tree['name_comment'], 'Note for A')
+
             # parents should include both B Father and C Mother
             parent_names = {c['name'] for c in tree['children']}
             self.assertEqual(parent_names, {'B Father', 'C Mother'})
@@ -94,7 +103,6 @@ class TestTreeUtils(unittest.TestCase):
 
             # old_id should no longer be part of the node dict
             self.assertNotIn('old_id', tree)
-
     def test_build_descendant_tree(self):
         tree = build_descendant_tree(self.conn, 1, 'T1')
         self.assertIsNotNone(tree, "build_descendant_tree returned None")
