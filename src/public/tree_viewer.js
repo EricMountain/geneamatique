@@ -263,7 +263,8 @@ async function render() {
 
     const nodeEnter = nodes.enter().append('g')
         .attr('class', 'node')
-        .attr('transform', d => `translate(${d.x},${d.y})`);
+        .attr('transform', d => `translate(${d.x},${d.y})`)
+        .style('cursor', 'pointer');
 
     nodeEnter.append('rect')
         .attr('rx', 4)
@@ -317,17 +318,22 @@ async function render() {
     });
 
     // Interaction
+    // Expand on hover; do NOT collapse on mouseleave so transient layout shifts won't close the bubble.
+    // Collapse/toggle when the user explicitly clicks the node.
     nodeUpdate.on('mouseenter', function (event, d) {
         if (!expandedNodes.has(d.data.db_id)) {
             expandedNodes.add(d.data.db_id);
             render(); // Re-layout
         }
     })
-        .on('mouseleave', function (event, d) {
+        .on('click', function (event, d) {
+            // Toggle expanded state on click
             if (expandedNodes.has(d.data.db_id)) {
                 expandedNodes.delete(d.data.db_id);
-                render(); // Re-layout
+            } else {
+                expandedNodes.add(d.data.db_id);
             }
+            render(); // Re-layout
         });
 
     nodes.exit().remove();

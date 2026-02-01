@@ -108,7 +108,7 @@ resource "aws_lambda_function" "genealogy" {
   timeout          = 15
   environment {
     variables = {
-      API_KEYS_TABLE     = aws_dynamodb_table.api_keys.name
+      API_KEYS_TABLE      = aws_dynamodb_table.api_keys.name
       ALLOWED_USERS_TABLE = aws_dynamodb_table.allowed_users.name
     }
   }
