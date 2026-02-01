@@ -29,6 +29,9 @@ node_modules/
 # Build outputs
 lambda/dist/
 
+# Ignore generated demo tree files
+**/demo_tree.json
+
 # Terraform local files
 terraform/aws/.terraform/
 terraform/aws/*.tfstate
