@@ -141,34 +141,29 @@ exports.handler = async function (event) {
         // GET /api/individuals?q=...  -- simple search
         if (reqPath.startsWith('/api/individuals')) {
             const q = (event.queryStringParameters && event.queryStringParameters.q) || '';
-            const family_tree = (event.queryStringParameters && event.queryStringParameters.family_tree) || null;
             const db = dbOpen();
             try {
                 let rows;
+                // Simple distinct individuals list that queries only the individuals table
                 if (!q) {
-                    rows = await dbAll(db, `SELECT DISTINCT i.id as id, iti.family_tree as family_tree, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth as date_of_birth
-                        FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id
-                        ORDER BY i.canonical_name LIMIT 100`, []);
+                    rows = await dbAll(db, `SELECT id, canonical_name, name_comment, date_of_birth FROM individuals ORDER BY canonical_name LIMIT 100`, []);
                 } else {
                     const maybeId = parseInt(q, 10);
                     if (!isNaN(maybeId)) {
-                        let sql = `SELECT DISTINCT i.id as id, iti.family_tree as family_tree, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth as date_of_birth
-                            FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id
-                            WHERE iti.old_id = ?`;
-                        const params = [maybeId];
-                        if (family_tree) { sql += ' AND iti.family_tree = ?'; params.push(family_tree); }
-                        sql += ' ORDER BY iti.family_tree, iti.old_id LIMIT 100';
-                        rows = await dbAll(db, sql, params);
+                        rows = await dbAll(db, `SELECT id, canonical_name, name_comment, date_of_birth FROM individuals WHERE id = ? LIMIT 100`, [maybeId]);
                     } else {
-                        let sql = `SELECT DISTINCT i.id as id, iti.family_tree as family_tree, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth as date_of_birth
-                            FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id
-                            WHERE i.canonical_name LIKE ?`;
-                        const params = [`%${q}%`];
-                        if (family_tree) { sql += ' AND iti.family_tree = ?'; params.push(family_tree); }
-                        sql += ' ORDER BY iti.family_tree, iti.old_id LIMIT 200';
-                        rows = await dbAll(db, sql, params);
+                        rows = await dbAll(db, `SELECT id, canonical_name, name_comment, date_of_birth FROM individuals WHERE canonical_name LIKE ? ORDER BY canonical_name LIMIT 200`, [`%${q}%`]);
                     }
                 }
+
+                // Map results to the simplified shape expected by the client
+                rows = rows.map(r => ({
+                    id: r.id,
+                    canonical_name: r.canonical_name,
+                    name_comment: r.name_comment,
+                    date_of_birth: r.date_of_birth
+                }));
+
                 db.close();
                 return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify(rows) };
             } catch (err) {

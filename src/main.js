@@ -24,10 +24,12 @@ script.onload = () => {
             el.style.padding = '8px';
             el.style.borderBottom = '1px solid #eee';
             el.style.cursor = 'pointer';
-            el.textContent = `${item.canonical_name} (DB:${item.id}${item.family_tree ? ' / ' + item.family_tree : ''}${item.date_of_birth ? ' • ' + item.date_of_birth : ''})`;
+            // Do not show family_tree information here — keep results focused on the canonical individual
+            el.textContent = `${item.canonical_name} (DB:${item.id}${item.date_of_birth ? ' • ' + item.date_of_birth : ''})`;
             el.onclick = () => {
                 results.style.display = 'none';
-                input.value = el.textContent;
+                input.value = item.canonical_name;
+                // We deliberately pass only the db id; the server will pick an instance if family_tree is not supplied
                 fetchTreeFor(item.id);
             };
             results.appendChild(el);
