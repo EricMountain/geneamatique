@@ -35,3 +35,15 @@ This repo parses genealogy tables from ODT files into an SQLite database, then p
 - No absolute paths that reveal personal directories.
 - No real ODT/DB files tracked by git.
 - data/ is ignored and contains only sanitized sample data if needed.
+
+## PWA / Lambda deployment (new)
+- Front-end (Vite) app lives under `src/`. Build artifacts are output to `lambda/dist`.
+- To build and package the app into the lambda directory run:
+
+```bash
+./build_pwa.sh
+```
+
+- Terraform will package the `lambda/` directory into `lambda.zip`. The Terraform config now creates an `DynamoDB` table for API keys (`${var.dynamodb_table_prefix}-api-keys`) and injects its name into the Lambda env var `API_KEYS_TABLE`.
+- To operate the PWA you must provision an API key in the DynamoDB table (primary key `api_key` -> maps to a device/name). Requests serving anything other than icons are authenticated with the API key. The Lambda accepts the key as an `x-api-key` header or `Authorization: ApiKey <key>`, as a cookie named `api_key`, or as a query parameter `?api_key=<key>` (when supplied via query parameter the Lambda will set a secure, HttpOnly cookie valid for 400 days for subsequent requests).
+- After build/run, use `terraform apply` from `terraform/aws` to create the table and lambda. Ensure `build_pwa.sh` has been run first so the lambda package contains the site.

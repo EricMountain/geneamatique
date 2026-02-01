@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.json">
+    <title>Genealogy Tree Viewer</title>
+    <style>
+        html,
+        body,
+        #chart {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            font-family: sans-serif;
+        }
+
+        svg.grabbing {
+            cursor: grabbing;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="chart"></div>
+
+    <!-- d3 and elk are expected by ui/tree_viewer.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/elkjs/lib/elk.bundled.js"></script>
+
+    <script type="module" src="/main.js"></script>
+</body>
+
+</html>
