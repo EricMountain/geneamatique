@@ -57,11 +57,13 @@ class TestAppendTrailingComment(unittest.TestCase):
             'source_file': 'file2.odt'
         }
 
-        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([ind1, ind2], db_name=self.db_name)
+        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([
+                                                                                                          ind1, ind2], db_name=self.db_name)
 
         conn = sqlite3.connect(self.db_name)
         cur = conn.cursor()
-        cur.execute("SELECT name_comment FROM individuals WHERE canonical_name = ?", ('Smith, John',))
+        cur.execute(
+            "SELECT name_comment FROM individuals WHERE canonical_name = ?", ('Smith, John',))
         row = cur.fetchone()
         conn.close()
 
@@ -113,14 +115,16 @@ class TestAppendTrailingComment(unittest.TestCase):
             'source_file': 'file2.odt'
         }
 
-        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([ind1, ind2], db_name=self.db_name)
+        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([
+                                                                                                          ind1, ind2], db_name=self.db_name)
 
         # No conflict should be raised; trailing text should be appended to name_comment
         self.assertEqual(warning_count, 0)
 
         conn = sqlite3.connect(self.db_name)
         cur = conn.cursor()
-        cur.execute("SELECT name_comment FROM individuals WHERE canonical_name = ?", ('AYRAL Julie',))
+        cur.execute(
+            "SELECT name_comment FROM individuals WHERE canonical_name = ?", ('AYRAL Julie',))
         row = cur.fetchone()
         conn.close()
 
@@ -166,14 +170,16 @@ class TestAppendTrailingComment(unittest.TestCase):
             'source_file': 'file2.odt'
         }
 
-        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([ind1, ind2], db_name=self.db_name)
+        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([
+                                                                                                          ind1, ind2], db_name=self.db_name)
 
         # A conflict should be raised because the trailing text looks like the canonical name
         self.assertGreater(warning_count, 0)
 
         conn = sqlite3.connect(self.db_name)
         cur = conn.cursor()
-        cur.execute("SELECT name_comment FROM individuals WHERE canonical_name = ?", ('SMITH John',))
+        cur.execute(
+            "SELECT name_comment FROM individuals WHERE canonical_name = ?", ('SMITH John',))
         row = cur.fetchone()
         conn.close()
 
@@ -220,14 +226,17 @@ class TestAppendTrailingComment(unittest.TestCase):
             'source_file': 'file2.odt'
         }
 
-        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([ind1, ind2], db_name=self.db_name)
+        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([
+                                                                                                          ind1, ind2], db_name=self.db_name)
 
         # Only one canonical individual should exist, and the birth date should be filled in
         conn = sqlite3.connect(self.db_name)
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM individuals WHERE canonical_name = ?", ('MANOURY Bernard François René',))
+        cur.execute("SELECT COUNT(*) FROM individuals WHERE canonical_name = ?",
+                    ('MANOURY Bernard François René',))
         count = cur.fetchone()[0]
-        cur.execute("SELECT date_of_birth FROM individuals WHERE canonical_name = ?", ('MANOURY Bernard François René',))
+        cur.execute("SELECT date_of_birth FROM individuals WHERE canonical_name = ?",
+                    ('MANOURY Bernard François René',))
         dob = cur.fetchone()[0]
         conn.close()
 
@@ -271,7 +280,7 @@ class TestAppendTrailingComment(unittest.TestCase):
             # Find the individual
             self.assertTrue(len(individuals) >= 1)
             ind = individuals[0]
-            self.assertIn('humble circumstances', ind.get('name_comment',''))
+            self.assertIn('humble circumstances', ind.get('name_comment', ''))
         finally:
             os.remove(temp_path)
 
@@ -315,12 +324,14 @@ class TestAppendTrailingComment(unittest.TestCase):
             create_database(temp_db)
 
             # Store parsed data
-            num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data(individuals, db_name=temp_db)
+            num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data(
+                individuals, db_name=temp_db)
 
             # Inspect DB for name_comment
             conn = sqlite3.connect(temp_db)
             cur = conn.cursor()
-            cur.execute("SELECT name_comment FROM individuals WHERE canonical_name = ?", ('Stored Person',))
+            cur.execute(
+                "SELECT name_comment FROM individuals WHERE canonical_name = ?", ('Stored Person',))
             row = cur.fetchone()
             conn.close()
 

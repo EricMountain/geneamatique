@@ -673,7 +673,8 @@ def parse_document(filepath, base_path=None):
                 for cell in cells:
                     # Handle ODF repeated columns if present
                     try:
-                        repeat_attr = cell.getAttribute('numbercolumnsrepeated')
+                        repeat_attr = cell.getAttribute(
+                            'numbercolumnsrepeated')
                         repeat = int(repeat_attr) if repeat_attr else 1
                     except Exception:
                         repeat = 1
@@ -687,7 +688,8 @@ def parse_document(filepath, base_path=None):
                         individual['source_file'] = source_filename
                         individuals.append(individual)
                         for offset in range(repeat):
-                            last_individual_by_col[col_idx + offset] = individual
+                            last_individual_by_col[col_idx +
+                                                   offset] = individual
                     else:
                         # Non-individual cell with text: if there's a previous
                         # individual in the same column and that individual had
@@ -701,7 +703,8 @@ def parse_document(filepath, base_path=None):
                                     existing_nc = prev.get('name_comment')
                                     if existing_nc:
                                         if text_to_append not in existing_nc:
-                                            prev['name_comment'] = existing_nc + '; ' + text_to_append
+                                            prev['name_comment'] = existing_nc + \
+                                                '; ' + text_to_append
                                     else:
                                         prev['name_comment'] = text_to_append
                     col_idx += repeat
@@ -904,7 +907,8 @@ def find_matching_individual(cursor, individual):
 
     all_candidates = cursor.fetchall()
     # Use Python-level normalization to handle Unicode/locale differences
-    candidates = [c for c in all_candidates if normalize_name(c[1]) == normalized_name]
+    candidates = [c for c in all_candidates if normalize_name(
+        c[1]) == normalized_name]
 
     for candidate in candidates:
         candidate_id, candidate_name, candidate_dob, candidate_dod = candidate
@@ -913,7 +917,8 @@ def find_matching_individual(cursor, individual):
         if not candidate_dob:
             if individual['date_of_birth']:
                 # Update the candidate with the birth date to make future matching robust
-                cursor.execute('UPDATE individuals SET date_of_birth = ? WHERE id = ?', (individual['date_of_birth'], candidate_id))
+                cursor.execute('UPDATE individuals SET date_of_birth = ? WHERE id = ?',
+                               (individual['date_of_birth'], candidate_id))
                 candidate_dob = individual['date_of_birth']
             else:
                 # Neither has a birth date - cannot safely match
@@ -930,7 +935,8 @@ def find_matching_individual(cursor, individual):
 
         # If candidate had no death date but incoming has one, update it
         if not candidate_dod and individual['date_of_death']:
-            cursor.execute('UPDATE individuals SET date_of_death = ? WHERE id = ?', (individual['date_of_death'], candidate_id))
+            cursor.execute('UPDATE individuals SET date_of_death = ? WHERE id = ?',
+                           (individual['date_of_death'], candidate_id))
 
         return candidate_id
 
@@ -1000,15 +1006,18 @@ def store_data(individuals, db_name='data/genealogy.db'):
                             text_similar = True
                         else:
                             # Append to name_comment (avoid duplicates)
-                            cursor.execute('SELECT name_comment FROM individuals WHERE id = ?', (individual_id,))
+                            cursor.execute(
+                                'SELECT name_comment FROM individuals WHERE id = ?', (individual_id,))
                             row = cursor.fetchone()
                             existing_name_comment = row[0] if row else None
                             if existing_name_comment:
                                 if text_to_append not in existing_name_comment:
                                     new_name_comment = existing_name_comment + '; ' + text_to_append
-                                    cursor.execute('UPDATE individuals SET name_comment = ? WHERE id = ?', (new_name_comment, individual_id))
+                                    cursor.execute(
+                                        'UPDATE individuals SET name_comment = ? WHERE id = ?', (new_name_comment, individual_id))
                             else:
-                                cursor.execute('UPDATE individuals SET name_comment = ? WHERE id = ?', (text_to_append, individual_id))
+                                cursor.execute(
+                                    'UPDATE individuals SET name_comment = ? WHERE id = ?', (text_to_append, individual_id))
 
                 # If the parsed name appears to be a real name (or the text looked similar to
                 # the canonical name), perform strict conflict detection and skip the entry if
