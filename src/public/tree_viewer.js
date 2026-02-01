@@ -12,6 +12,28 @@ const svg = d3.select('#chart').append('svg')
 const g = svg.append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`);
 
+// Gender colours (match import_tools/tree_visualizer.py: cyan for men, yellow for women)
+// Accent colours for text/stroke; fill are pale tints for node backgrounds.
+const GENDER_COLORS = {
+    male: { accent: '#00bcd4', fill: '#e0f7fa', text: '#006064' },
+    female: { accent: '#f0c330', fill: '#fff8e1', text: '#8a6d00' },
+    unknown: { accent: '#999999', fill: '#f5f5f5', text: '#333333' }
+};
+
+function genderForData(d) {
+    const sosa = d && d.sosa;
+    const oldId = d && d.old_id;
+    if (typeof sosa === 'number') {
+        return (sosa % 2 === 0) ? 'male' : 'female';
+    }
+    if (typeof oldId === 'number') {
+        return (oldId % 2 === 0) ? 'male' : 'female';
+    }
+    return 'unknown';
+}
+
+function genderColor(d) { return GENDER_COLORS[genderForData(d)]; }
+
 // Add zoom behavior
 const zoom = d3.zoom()
     .on('zoom', (event) => {
@@ -269,7 +291,12 @@ async function render() {
 
     nodeEnter.append('rect')
         .attr('rx', 4)
-        .attr('ry', 4);
+        .attr('ry', 4)
+        .attr('width', d => d.width)
+        .attr('height', d => d.height)
+        .style('fill', d => genderColor(d.data).fill)
+        .style('stroke', d => genderColor(d.data).accent)
+        .style('stroke-width', '1.5px');
 
     nodeEnter.append('text')
         .attr('class', 'name')
@@ -286,12 +313,16 @@ async function render() {
     nodeUpdate.select('rect')
         .transition().duration(400)
         .attr('width', d => d.width)
-        .attr('height', d => d.height);
+        .attr('height', d => d.height)
+        .style('fill', d => genderColor(d.data).fill)
+        .style('stroke', d => genderColor(d.data).accent)
+        .style('stroke-width', '1.5px');
 
     nodeUpdate.select('.name')
         .transition().duration(400)
         .attr('x', d => d.width / 2)
-        .text(d => d.data.name);
+        .text(d => d.data.name)
+        .style('fill', d => genderColor(d.data).text);
 
     // Details
     nodeUpdate.each(function (d) {
