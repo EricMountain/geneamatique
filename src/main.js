@@ -125,8 +125,7 @@ script.onload = () => {
         }
     }
 
-    btn.addEventListener('click', async () => {
-        const q = input.value.trim();
+    async function searchAndHandle(q) {
         if (!q) return;
         const list = await searchIndividuals(q);
         if (list.length === 1) {
@@ -135,6 +134,17 @@ script.onload = () => {
             showNoMatches(q);
         } else {
             showResults(list);
+        }
+    }
+
+    btn.addEventListener('click', async () => {
+        await searchAndHandle(input.value.trim());
+    });
+
+    input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await searchAndHandle(input.value.trim());
         }
     });
 
