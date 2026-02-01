@@ -358,8 +358,9 @@ async function render() {
     // Details
     nodeUpdate.each(function (d) {
         const nodeGroup = d3.select(this);
-        const isExpanded = expandedNodes.has(d.data.db_id);
-        const details = isExpanded ? formatDetails(d.data) : [];
+        const nodeDatum = d; // capture the node layout datum for nested accessors
+        const isExpanded = expandedNodes.has(nodeDatum.data.db_id);
+        const details = isExpanded ? formatDetails(nodeDatum.data) : [];
 
         const detailTexts = nodeGroup.selectAll('.details').data(details, (text, i) => i);
 
@@ -370,13 +371,14 @@ async function render() {
             .attr('text-anchor', 'middle')
             .attr('font-size', '10px')
             .merge(detailTexts)
-            .attr('x', d.width / 2)
+            .attr('x', () => nodeDatum.width / 2)
             .attr('y', (text, i) => {
                 const nameHeight = 24;
                 const detailLineHeight = 11;
                 const detailsTopPadding = 14;
                 return nameHeight + detailsTopPadding + i * detailLineHeight;
             })
+            .style('fill', () => genderColor(nodeDatum.data).text)
             .text(text => text);
     });
 
