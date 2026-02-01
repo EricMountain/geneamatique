@@ -588,18 +588,32 @@ def parse_individual_data(cell_text, source_file=None, family_tree=None):
     marriage_details = {'date': None, 'location': None, 'comment': None}
     profession = None
 
+    # Track whether any event markers (°, +, PR, X) were present in the cell
+    event_marker_found = False
+
     for line in lines[1:]:
         if line.startswith('°'):
+            event_marker_found = True
             birth_details = parse_event_details(
                 line[1:].strip(), 'birth', source_file, name)
         elif line.startswith('+'):
+            event_marker_found = True
             death_details = parse_event_details(
                 line[1:].strip(), 'death', source_file, name)
         elif line.startswith('PR'):
+            event_marker_found = True
             profession = line[2:].strip()
         elif line.startswith('X'):
+            event_marker_found = True
             marriage_details = parse_event_details(
                 line[1:].strip(), 'marriage', source_file, name)
+
+    # If no event markers were found, preserve the raw text that followed the ID
+    # so it can be appended as a comment for an existing individual later.
+    text_after_id = None
+    if not event_marker_found:
+        # Use the full text from the first line after the numeric ID
+        text_after_id = full_name if full_name and full_name.strip() else None
 
     return {
         'old_id': old_id,
@@ -615,7 +629,8 @@ def parse_individual_data(cell_text, source_file=None, family_tree=None):
         'profession': profession,
         'marriage_date': marriage_details['date'],
         'marriage_location': marriage_details['location'],
-        'marriage_comment': marriage_details['comment']
+        'marriage_comment': marriage_details['comment'],
+        'text_after_id': text_after_id
     }
 
 
@@ -796,6 +811,43 @@ def normalize_name(name):
     return normalized
 
 
+def is_text_similar_to_name(text: str, name: str, threshold: float = 0.6) -> bool:
+    """Heuristic to decide if a free-form text is similar to a canonical name.
+
+    Strategy:
+    - Normalize and strip non-alphanumeric chars.
+    - If either string contains the other, consider similar.
+    - Otherwise compute token overlap ratio against the name tokens; if >= threshold,
+      consider similar.
+    """
+    if not text or not name:
+        return False
+
+    def norm(s: str) -> str:
+        s = s.upper()
+        s = re.sub(r"[^A-Z0-9\s]", " ", s)
+        s = ' '.join(s.split())
+        return s
+
+    txt = norm(text)
+    nm = norm(name)
+
+    if not txt or not nm:
+        return False
+
+    # Substring checks
+    if nm in txt or txt in nm:
+        return True
+
+    txt_tokens = set(txt.split())
+    nm_tokens = set(nm.split())
+    if not nm_tokens:
+        return False
+
+    overlap = len(txt_tokens & nm_tokens) / len(nm_tokens)
+    return overlap >= threshold
+
+
 def find_matching_individual(cursor, individual):
     """Find existing individual that matches by name and birth date.
 
@@ -887,17 +939,45 @@ def store_data(individuals, db_name='data/genealogy.db'):
                 ''', (individual_id,))
                 existing_canonical_name = cursor.fetchone()[0]
 
-                # Check if names match (normalize both for comparison)
-                if normalize_name(individual['name']) != normalize_name(existing_canonical_name):
-                    # CONFLICT: Same (family_tree, old_id) but different people!
-                    warning_count += 1
-                    print(
-                        f"\033[1;33mWARNING\033[0m: Data conflict in '{family_tree}', old_id {old_id}, keeping existing entry.")
-                    print(
-                        f"  \033[1mExisting:\033[0m \033[32m{existing_canonical_name}\033[0m (from \033[36m\"{existing_source_file}\"\033[0m)")
-                    print(
-                        f"  \033[1mNew:\033[0m      \033[31m{individual['name']}\033[0m (from \033[36m\"{individual['source_file']}\"\033[0m)")
-                    continue  # Skip this conflicting entry
+                # If this cell contained no event markers but has extra text after the ID,
+                # decide whether to append it to the canonical individual's name_comment.
+                # If the free-form text looks similar to the canonical name, do NOT append
+                # it and *do* run normal conflict detection (it may indicate a different
+                # person). Otherwise, append it and skip the strict conflict check.
+                text_after = individual.get('text_after_id')
+                text_similar = False
+                if text_after:
+                    text_to_append = text_after.strip()
+                    if text_to_append:
+                        # Decide similarity against the canonical name
+                        if is_text_similar_to_name(text_to_append, existing_canonical_name):
+                            text_similar = True
+                        else:
+                            # Append to name_comment (avoid duplicates)
+                            cursor.execute('SELECT name_comment FROM individuals WHERE id = ?', (individual_id,))
+                            row = cursor.fetchone()
+                            existing_name_comment = row[0] if row else None
+                            if existing_name_comment:
+                                if text_to_append not in existing_name_comment:
+                                    new_name_comment = existing_name_comment + '; ' + text_to_append
+                                    cursor.execute('UPDATE individuals SET name_comment = ? WHERE id = ?', (new_name_comment, individual_id))
+                            else:
+                                cursor.execute('UPDATE individuals SET name_comment = ? WHERE id = ?', (text_to_append, individual_id))
+
+                # If the parsed name appears to be a real name (or the text looked similar to
+                # the canonical name), perform strict conflict detection and skip the entry if
+                # it doesn't match the existing canonical name.
+                if (not text_after) or text_similar:
+                    if normalize_name(individual['name']) != normalize_name(existing_canonical_name):
+                        # CONFLICT: Same (family_tree, old_id) but different people!
+                        warning_count += 1
+                        print(
+                            f"\033[1;33mWARNING\033[0m: Data conflict in '{family_tree}', old_id {old_id}, keeping existing entry.")
+                        print(
+                            f"  \033[1mCurrent:\033[0m  \033[32m{existing_canonical_name}\033[0m \033[36m\"{existing_source_file}\"\033[0m")
+                        print(
+                            f"  \033[1mConflict:\033[0m \033[31m{individual['name']}\033[0m \033[36m\"{individual['source_file']}\"\033[0m")
+                        continue  # Skip this conflicting entry
 
                 # Same person - prefer longer/more complete name variant
                 if len(individual['name']) > len(existing_variant or ''):
