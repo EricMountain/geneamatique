@@ -69,8 +69,8 @@ function formatDetails(d) {
 
     // Database id and SOSA number for reference
     if (d.db_id !== undefined && d.db_id !== null) {
-        const sosaPart = (d.sosa !== undefined && d.sosa !== null) ? `SOSA: ${d.sosa} ` : 'SOSA: ';
-        lines.push(`${sosaPart}Id: ${d.db_id}`);
+        const sosaPart = (d.sosa !== undefined && d.sosa !== null) ? `SOSA: ${d.sosa}` : 'SOSA: ?';
+        lines.push(`${sosaPart}, DBId: ${d.db_id}`);
     }
 
     return lines;
@@ -93,7 +93,7 @@ function estimateTextWidth(text, fontSize = 12) {
     // Add horizontal padding so text doesn't sit too close to the rectangle edge
     const horizontalPadding = 28;
     return measured + horizontalPadding;
-} 
+}
 
 // Calculate node dimensions
 function calculateNodeDimensions(d) {
