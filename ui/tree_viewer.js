@@ -40,32 +40,35 @@ function formatDetails(d) {
     // Name comment (shown near the name in the CLI tool; show on hover here)
     if (d.name_comment) lines.push(`(${d.name_comment})`);
 
-    // Birth: date + optional location on same line
-    if (d.date_of_birth || d.birth_location) {
-        let s = '';
-        if (d.date_of_birth) s += `${BIRTH_SYMBOL} ${d.date_of_birth}`;
-        if (d.birth_location) s += `${s ? ' ' : ''}à ${d.birth_location}`;
-        if (s) lines.push(s);
+    // Birth: show marker + date/location/comment on one line; show marker even if date missing
+    if (d.date_of_birth || d.birth_location || d.birth_comment) {
+        let parts = [];
+        if (d.date_of_birth) parts.push(d.date_of_birth);
+        if (d.birth_location) parts.push(`à ${d.birth_location}`);
+        let s = `${BIRTH_SYMBOL} ${parts.join(' ')}`;
+        if (d.birth_comment) s += ` (${d.birth_comment})`;
+        lines.push(s);
     }
-    if (d.birth_comment) lines.push(`(${d.birth_comment})`);
 
-    // Death: date + optional location
-    if (d.date_of_death || d.death_location) {
-        let s = '';
-        if (d.date_of_death) s += `${DEATH_SYMBOL} ${d.date_of_death}`;
-        if (d.death_location) s += `${s ? ' ' : ''}à ${d.death_location}`;
-        if (s) lines.push(s);
+    // Death: show marker + date/location/comment on one line; show marker even if date missing
+    if (d.date_of_death || d.death_location || d.death_comment) {
+        let parts = [];
+        if (d.date_of_death) parts.push(d.date_of_death);
+        if (d.death_location) parts.push(`à ${d.death_location}`);
+        let s = `${DEATH_SYMBOL} ${parts.join(' ')}`;
+        if (d.death_comment) s += ` (${d.death_comment})`;
+        lines.push(s);
     }
-    if (d.death_comment) lines.push(`(${d.death_comment})`);
 
-    // Marriage: date + optional location
-    if (d.marriage_date || d.marriage_location) {
-        let s = '';
-        if (d.marriage_date) s += `${MARRIAGE_SYMBOL} ${d.marriage_date}`;
-        if (d.marriage_location) s += `${s ? ' ' : ''}à ${d.marriage_location}`;
-        if (s) lines.push(s);
+    // Marriage: show marker + date/location/comment on one line; show marker even if date missing
+    if (d.marriage_date || d.marriage_location || d.marriage_comment) {
+        let parts = [];
+        if (d.marriage_date) parts.push(d.marriage_date);
+        if (d.marriage_location) parts.push(`à ${d.marriage_location}`);
+        let s = `${MARRIAGE_SYMBOL} ${parts.join(' ')}`;
+        if (d.marriage_comment) s += ` (${d.marriage_comment})`;
+        lines.push(s);
     }
-    if (d.marriage_comment) lines.push(`(${d.marriage_comment})`);
 
     // Database id and SOSA number for reference
     if (d.db_id !== undefined && d.db_id !== null) {
