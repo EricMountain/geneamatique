@@ -181,6 +181,59 @@ class TestAppendTrailingComment(unittest.TestCase):
         if row:
             self.assertTrue(row[0] is None or 'SMITH John' not in row[0])
 
+    def test_merge_when_existing_canonical_missing_dob(self):
+        # First occurrence has no DOB and creates the canonical without a birth date
+        ind1 = {
+            'old_id': 1,
+            'family_tree': 'TreeX',
+            'name': 'MANOURY Bernard François René',
+            'name_comment': None,
+            'date_of_birth': None,
+            'birth_location': None,
+            'birth_comment': None,
+            'date_of_death': None,
+            'death_location': None,
+            'death_comment': None,
+            'profession': None,
+            'marriage_date': None,
+            'marriage_location': None,
+            'marriage_comment': None,
+            'source_file': 'file1.odt'
+        }
+
+        # Second occurrence from another tree has the DOB and should merge into the same canonical
+        ind2 = {
+            'old_id': 1,
+            'family_tree': 'TreeY',
+            'name': 'MANOURY Bernard François René',
+            'name_comment': None,
+            'date_of_birth': '1952-07-04',
+            'birth_location': None,
+            'birth_comment': None,
+            'date_of_death': None,
+            'death_location': None,
+            'death_comment': None,
+            'profession': None,
+            'marriage_date': None,
+            'marriage_location': None,
+            'marriage_comment': None,
+            'source_file': 'file2.odt'
+        }
+
+        num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data([ind1, ind2], db_name=self.db_name)
+
+        # Only one canonical individual should exist, and the birth date should be filled in
+        conn = sqlite3.connect(self.db_name)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM individuals WHERE canonical_name = ?", ('MANOURY Bernard François René',))
+        count = cur.fetchone()[0]
+        cur.execute("SELECT date_of_birth FROM individuals WHERE canonical_name = ?", ('MANOURY Bernard François René',))
+        dob = cur.fetchone()[0]
+        conn.close()
+
+        self.assertEqual(count, 1)
+        self.assertEqual(dob, '1952-07-04')
+
     def test_append_text_from_cell_below_individual(self):
         # Create a minimal ODT table in memory with two rows in one column:
         # Row 1: defines the individual with event markers

@@ -896,22 +896,30 @@ def find_matching_individual(cursor, individual):
     if not individual['date_of_birth']:
         return None
 
-    # First try exact name match
+    # First try exact name match - fetch all and compare with Python normalization
     cursor.execute('''
         SELECT id, canonical_name, date_of_birth, date_of_death
         FROM individuals
-        WHERE UPPER(REPLACE(canonical_name, '  ', ' ')) = ?
-    ''', (normalized_name,))
+    ''')
 
-    candidates = cursor.fetchall()
+    all_candidates = cursor.fetchall()
+    # Use Python-level normalization to handle Unicode/locale differences
+    candidates = [c for c in all_candidates if normalize_name(c[1]) == normalized_name]
 
     for candidate in candidates:
         candidate_id, candidate_name, candidate_dob, candidate_dod = candidate
 
-        # Require birth date match
+        # If candidate has no birth date but incoming individual does, assume match and update DB.
         if not candidate_dob:
-            continue
+            if individual['date_of_birth']:
+                # Update the candidate with the birth date to make future matching robust
+                cursor.execute('UPDATE individuals SET date_of_birth = ? WHERE id = ?', (individual['date_of_birth'], candidate_id))
+                candidate_dob = individual['date_of_birth']
+            else:
+                # Neither has a birth date - cannot safely match
+                continue
 
+        # Require birth date match
         if individual['date_of_birth'] != candidate_dob:
             continue
 
@@ -919,6 +927,10 @@ def find_matching_individual(cursor, individual):
         if individual['date_of_death'] and candidate_dod:
             if individual['date_of_death'] != candidate_dod:
                 continue
+
+        # If candidate had no death date but incoming has one, update it
+        if not candidate_dod and individual['date_of_death']:
+            cursor.execute('UPDATE individuals SET date_of_death = ? WHERE id = ?', (individual['date_of_death'], candidate_id))
 
         return candidate_id
 
