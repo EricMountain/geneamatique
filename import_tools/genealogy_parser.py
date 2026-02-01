@@ -630,7 +630,8 @@ def parse_individual_data(cell_text, source_file=None, family_tree=None):
         'marriage_date': marriage_details['date'],
         'marriage_location': marriage_details['location'],
         'marriage_comment': marriage_details['comment'],
-        'text_after_id': text_after_id
+        'text_after_id': text_after_id,
+        'event_marker_found': event_marker_found
     }
 
 
@@ -662,15 +663,48 @@ def parse_document(filepath, base_path=None):
 
         for table in tables:
             rows = table.getElementsByType(TableRow)
+            # Track last parsed individual per column index so we can attach
+            # free-form text from cells below an individual into the individual's
+            # name_comment when appropriate.
+            last_individual_by_col = {}
             for row in rows:
                 cells = row.getElementsByType(TableCell)
+                col_idx = 0
                 for cell in cells:
+                    # Handle ODF repeated columns if present
+                    try:
+                        repeat_attr = cell.getAttribute('numbercolumnsrepeated')
+                        repeat = int(repeat_attr) if repeat_attr else 1
+                    except Exception:
+                        repeat = 1
+
                     cell_text = get_cell_text(cell)
                     individual = parse_individual_data(
                         cell_text, source_filename, family_tree)
+
                     if individual:
+                        # Store and mark this individual as the last for the column(s)
                         individual['source_file'] = source_filename
                         individuals.append(individual)
+                        for offset in range(repeat):
+                            last_individual_by_col[col_idx + offset] = individual
+                    else:
+                        # Non-individual cell with text: if there's a previous
+                        # individual in the same column and that individual had
+                        # event markers (i.e., genuinely defines a person), append
+                        # this text to its name_comment.
+                        if cell_text and cell_text.strip():
+                            prev = last_individual_by_col.get(col_idx)
+                            if prev and prev.get('event_marker_found'):
+                                text_to_append = cell_text.strip()
+                                if text_to_append:
+                                    existing_nc = prev.get('name_comment')
+                                    if existing_nc:
+                                        if text_to_append not in existing_nc:
+                                            prev['name_comment'] = existing_nc + '; ' + text_to_append
+                                    else:
+                                        prev['name_comment'] = text_to_append
+                    col_idx += repeat
     except Exception as e:
         print(f"Error parsing {filepath}: {e}")
 

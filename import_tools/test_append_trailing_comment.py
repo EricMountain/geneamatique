@@ -2,7 +2,7 @@ import os
 import sqlite3
 import unittest
 
-from .genealogy_parser import create_database, store_data
+from .genealogy_parser import create_database, store_data, parse_document
 
 
 class TestAppendTrailingComment(unittest.TestCase):
@@ -180,6 +180,103 @@ class TestAppendTrailingComment(unittest.TestCase):
         # Name comment should not have the trailing text appended
         if row:
             self.assertTrue(row[0] is None or 'SMITH John' not in row[0])
+
+    def test_append_text_from_cell_below_individual(self):
+        # Create a minimal ODT table in memory with two rows in one column:
+        # Row 1: defines the individual with event markers
+        # Row 2: contains a text note (no ID) that should be appended to the individual's name_comment
+        from odf.opendocument import OpenDocumentText
+        from odf.table import Table, TableRow, TableCell
+        from odf.text import P
+
+        doc = OpenDocumentText()
+        table = Table(name="TestTable")
+
+        # Row 1: individual with event markers
+        row1 = TableRow()
+        cell1 = TableCell()
+        p1 = P(text="1. Test Person\n° 1 Jan 1900 à City\nPR Farmer")
+        cell1.addElement(p1)
+        row1.addElement(cell1)
+        table.addElement(row1)
+
+        # Row 2: free-form text below the individual
+        row2 = TableRow()
+        cell2 = TableCell()
+        p2 = P(text="Note: born in humble circumstances")
+        cell2.addElement(p2)
+        row2.addElement(cell2)
+        table.addElement(row2)
+
+        doc.text.addElement(table)
+
+        temp_path = 'test_below_cell.odt'
+        doc.save(temp_path)
+
+        try:
+            individuals = parse_document(temp_path)
+            # Find the individual
+            self.assertTrue(len(individuals) >= 1)
+            ind = individuals[0]
+            self.assertIn('humble circumstances', ind.get('name_comment',''))
+        finally:
+            os.remove(temp_path)
+
+    def test_store_appends_below_cell_text_to_db(self):
+        # Create a temp ODT with an individual and a note in the cell below,
+        # parse it and store into a fresh test DB, then assert name_comment in DB.
+        from odf.opendocument import OpenDocumentText
+        from odf.table import Table, TableRow, TableCell
+        from odf.text import P
+
+        doc = OpenDocumentText()
+        table = Table(name="TestTable")
+
+        # Row 1: individual with event markers
+        row1 = TableRow()
+        cell1 = TableCell()
+        p1 = P(text="2. Stored Person\n° 2 Feb 1902 à Town\nPR Baker")
+        cell1.addElement(p1)
+        row1.addElement(cell1)
+        table.addElement(row1)
+
+        # Row 2: free-form text below the individual
+        row2 = TableRow()
+        cell2 = TableCell()
+        p2 = P(text="Came from nearby village; family of bakers")
+        cell2.addElement(p2)
+        row2.addElement(cell2)
+        table.addElement(row2)
+
+        doc.text.addElement(table)
+
+        temp_path = 'test_below_cell_store.odt'
+        temp_db = 'test_below_cell_store.db'
+        doc.save(temp_path)
+
+        try:
+            individuals = parse_document(temp_path)
+            # Prepare test DB
+            if os.path.exists(temp_db):
+                os.remove(temp_db)
+            create_database(temp_db)
+
+            # Store parsed data
+            num_individuals, num_instances, num_relationships, merged_individuals, warning_count = store_data(individuals, db_name=temp_db)
+
+            # Inspect DB for name_comment
+            conn = sqlite3.connect(temp_db)
+            cur = conn.cursor()
+            cur.execute("SELECT name_comment FROM individuals WHERE canonical_name = ?", ('Stored Person',))
+            row = cur.fetchone()
+            conn.close()
+
+            self.assertIsNotNone(row)
+            self.assertIn('family of bakers', row[0])
+        finally:
+            os.remove(temp_path)
+            if os.path.exists(temp_db):
+                os.remove(temp_db)
 
 
 if __name__ == '__main__':
