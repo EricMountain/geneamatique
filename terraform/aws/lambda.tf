@@ -59,7 +59,19 @@ resource "aws_dynamodb_table" "api_keys" {
   }
 }
 
-# Allow lambda role to read the table (GetItem/Query/Scan)
+# DynamoDB table to hold allowed Google user emails (partition key: email)
+resource "aws_dynamodb_table" "allowed_users" {
+  name         = "${local.dynamodb_table_prefix}-allowed-users"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "email"
+
+  attribute {
+    name = "email"
+    type = "S"
+  }
+}
+
+# Allow lambda role to read the tables (GetItem/Query/Scan)
 resource "aws_iam_role_policy" "lambda_dynamodb" {
   name   = "${var.lambda_name}-dynamodb"
   role   = aws_iam_role.lambda.id
@@ -77,7 +89,9 @@ data "aws_iam_policy_document" "lambda_dynamodb" {
 
     resources = [
       aws_dynamodb_table.api_keys.arn,
-      "${aws_dynamodb_table.api_keys.arn}/*"
+      "${aws_dynamodb_table.api_keys.arn}/*",
+      aws_dynamodb_table.allowed_users.arn,
+      "${aws_dynamodb_table.allowed_users.arn}/*"
     ]
   }
 }
@@ -94,7 +108,8 @@ resource "aws_lambda_function" "genealogy" {
   timeout          = 15
   environment {
     variables = {
-      API_KEYS_TABLE = aws_dynamodb_table.api_keys.name
+      API_KEYS_TABLE     = aws_dynamodb_table.api_keys.name
+      ALLOWED_USERS_TABLE = aws_dynamodb_table.allowed_users.name
     }
   }
 }
@@ -105,7 +120,7 @@ resource "aws_lambda_function_url" "genealogy" {
 
   cors {
     allow_credentials = true
-    allow_headers     = ["content-type", "x-api-key"]
+    allow_headers     = ["content-type", "x-api-key", "authorization"]
     allow_methods     = ["GET", "POST"]
     allow_origins     = ["*"]
   }

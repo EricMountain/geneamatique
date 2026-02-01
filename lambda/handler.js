@@ -1,4 +1,10 @@
 const { DynamoDBClient, GetItemCommand } = require('@aws-sdk/client-dynamodb');
+let OAuth2Client = null;
+try {
+    OAuth2Client = require('google-auth-library').OAuth2Client;
+} catch (err) {
+    console.warn('google-auth-library not available; Google OAuth verification will be disabled in local runs');
+}
 const fs = require('fs').promises;
 const path = require('path');
 const mime = require('mime-types');
@@ -13,7 +19,9 @@ const sqlite3 = (() => {
 
 const DB_PATH = process.env.GENEALOGY_DB || path.join(__dirname, 'dist', 'data', 'genealogy.db');
 
-const TABLE = process.env.API_KEYS_TABLE;
+const TABLE = process.env.API_KEYS_TABLE; // legacy api-key table
+const ALLOWED_USERS_TABLE = process.env.ALLOWED_USERS_TABLE; // DynamoDB table that contains allowed Google user emails (partition key: "email")
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // Google OAuth Client ID used to validate ID tokens
 const dynamo = new DynamoDBClient({});
 
 function corsHeaders() {
@@ -108,20 +116,65 @@ exports.handler = async function (event) {
     let setCookieHeader = null;
 
     if (!unauthenticated) {
-        const headerKey = getApiKeyFromHeaders(headers);
-        const cookieKey = getApiKeyFromCookies(headers);
-        const queryKey = getApiKeyFromQuery(event);
+        // If an Authorization: Bearer <id_token> header is present, prefer Google OAuth verification
+        const getBearerToken = (headers) => {
+            if (!headers) return null;
+            const a = headers['authorization'] || headers['Authorization'] || headers['AUTHORIZATION'];
+            if (!a) return null;
+            if (a.startsWith('Bearer ')) return a.slice('Bearer '.length).trim();
+            return null;
+        };
 
-        const key = headerKey || cookieKey || queryKey;
+        const verifyGoogleIdToken = async (idToken) => {
+            if (!OAuth2Client) throw new Error('google-auth-library not installed');
+            if (!GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID not configured');
+            const client = new OAuth2Client(GOOGLE_CLIENT_ID);
+            const ticket = await client.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
+            return ticket.getPayload();
+        };
 
-        if (!key) return { statusCode: 401, headers: corsHeaders(), body: 'Missing API key' };
+        const checkAllowedUser = async (email) => {
+            if (!ALLOWED_USERS_TABLE) return false;
+            try {
+                const command = new GetItemCommand({ TableName: ALLOWED_USERS_TABLE, Key: { email: { S: email } } });
+                const res = await dynamo.send(command);
+                return !!res.Item;
+            } catch (err) {
+                console.error('DynamoDB error (allowed users)', err);
+                return false;
+            }
+        };
 
-        const ok = await checkApiKey(key);
-        if (!ok) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid API key' };
+        const bearer = getBearerToken(headers);
+        if (bearer) {
+            try {
+                const payload = await verifyGoogleIdToken(bearer);
+                const email = payload && payload.email && String(payload.email).toLowerCase();
+                if (!email) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid token: no email' };
+                const allowed = await checkAllowedUser(email);
+                if (!allowed) return { statusCode: 403, headers: corsHeaders(), body: 'Unauthorized user' };
+                // authenticated via Google; continue
+            } catch (err) {
+                console.error('Google auth error', err);
+                return { statusCode: 401, headers: corsHeaders(), body: 'Invalid or expired token' };
+            }
+        } else {
+            // fallback to API key behavior for backwards compatibility
+            const headerKey = getApiKeyFromHeaders(headers);
+            const cookieKey = getApiKeyFromCookies(headers);
+            const queryKey = getApiKeyFromQuery(event);
 
-        // If the client provided the key via query param and there is no cookie, set a cookie so future requests are authenticated
-        if (queryKey && !cookieKey) {
-            setCookieHeader = makeSetCookieHeader(key);
+            const key = headerKey || cookieKey || queryKey;
+
+            if (!key) return { statusCode: 401, headers: corsHeaders(), body: 'Missing API key or Authorization token' };
+
+            const ok = await checkApiKey(key);
+            if (!ok) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid API key' };
+
+            // If the client provided the key via query param and there is no cookie, set a cookie so future requests are authenticated
+            if (queryKey && !cookieKey) {
+                setCookieHeader = makeSetCookieHeader(key);
+            }
         }
     }
 
