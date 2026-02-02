@@ -2,6 +2,10 @@
     "name": "genealogy-lambda",
     "version": "0.1.0",
     "private": true,
+    "scripts": {
+        "audit:fix": "npm audit fix",
+        "audit:fix:force": "npm audit fix --force"
+    },
     "main": "handler.js",
     "dependencies": {
         "@aws-sdk/client-dynamodb": "^3.500.0",

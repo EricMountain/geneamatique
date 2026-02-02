@@ -5,7 +5,9 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build",
-        "preview": "vite preview --port 5000"
+        "preview": "vite preview --port 5000",
+        "audit:fix": "npm audit fix",
+        "audit:fix:force": "npm audit fix --force"
     },
     "devDependencies": {
         "vite": "^5.1.0"
