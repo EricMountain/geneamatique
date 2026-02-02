@@ -206,11 +206,9 @@ async function render() {
     const graph = {
         id: "root",
         layoutOptions: {
-            'elk.algorithm': 'elk.mrtree', // 'layered',
+            'elk.algorithm': 'elk.mrtree',
             'elk.direction': 'RIGHT',
-            'elk.layered.spacing.nodeNodeLayered': '40',
-            'elk.spacing.nodeNode': '20',
-            'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX'
+            'elk.spacing.nodeNode': '20'
         },
         children: elkNodes,
         edges: elkEdges
