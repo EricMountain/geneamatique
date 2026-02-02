@@ -326,34 +326,12 @@
             white-space: normal;
         }
 
-        /* Badge - light mode default */
+        /* Badge - inherit theme via CSS variables (keeps behaviour consistent) */
         #chart .chart-meta {
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid rgba(0, 0, 0, 0.06);
-            color: #333;
-        }
-
-        /* Badge - dark mode via system preference */
-        @media (prefers-color-scheme: dark) {
-            #chart .chart-meta {
-                background: rgba(30, 30, 30, 0.85);
-                border: 1px solid rgba(255, 255, 255, 0.06);
-                color: #e6eef8;
-            }
-        }
-
-        /* Badge - explicit light theme (override dark system preference) */
-        html[data-theme="light"] #chart .chart-meta {
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid rgba(0, 0, 0, 0.06);
-            color: #333;
-        }
-
-        /* Badge - explicit dark theme */
-        html[data-theme="dark"] #chart .chart-meta {
-            background: rgba(30, 30, 30, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            color: #e6eef8;
+            background: var(--overlay-bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            box-shadow: var(--chart-shadow);
         }
     </style>
 </head>
