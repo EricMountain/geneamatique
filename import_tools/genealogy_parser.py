@@ -90,18 +90,23 @@ def create_database(db_name='data/genealogy.db'):
     # Indexes to speed up tree queries (used by /api/tree)
     # - Query patterns frequently filter by child_id and optionally family_tree
     # - We also join on parent_id -> individuals.id and on individual_tree_instances.individual_id
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_relationships_child_family ON relationships(child_id, family_tree)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_relationships_child ON relationships(child_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_relationships_parent ON relationships(parent_id)')
+    cursor.execute(
+        'CREATE INDEX IF NOT EXISTS idx_relationships_child_family ON relationships(child_id, family_tree)')
+    cursor.execute(
+        'CREATE INDEX IF NOT EXISTS idx_relationships_child ON relationships(child_id)')
+    cursor.execute(
+        'CREATE INDEX IF NOT EXISTS idx_relationships_parent ON relationships(parent_id)')
     # Covering index for common getParents query (child_id, family_tree, relationship_type, parent_id)
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_relationships_child_family_reltype_parent ON relationships(child_id, family_tree, relationship_type, parent_id)')
+    cursor.execute(
+        'CREATE INDEX IF NOT EXISTS idx_relationships_child_family_reltype_parent ON relationships(child_id, family_tree, relationship_type, parent_id)')
 
     # Index on individual_tree_instances used by import-time lookups (family_tree, old_id)
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_iti_family_old ON individual_tree_instances(family_tree, old_id)')
-    # NOTE: other instance indexes removed because runtime `/api/tree` queries no longer join to this table
+    cursor.execute(
+        'CREATE INDEX IF NOT EXISTS idx_iti_family_old ON individual_tree_instances(family_tree, old_id)')
 
     # Index on individuals for name+dob lookups (used when trying alternate instances by name and DOB)
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_individuals_name_dob ON individuals(canonical_name, date_of_birth)')
+    cursor.execute(
+        'CREATE INDEX IF NOT EXISTS idx_individuals_name_dob ON individuals(canonical_name, date_of_birth)')
 
     conn.commit()
     conn.close()
