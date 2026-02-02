@@ -41,53 +41,50 @@ script.onload = () => {
     if (!chartMeta) {
         chartMeta = document.createElement('div');
         chartMeta.id = 'chart-meta';
-        chartMeta.style.position = 'absolute';
-        chartMeta.style.top = '6px';
-        chartMeta.style.right = '6px';
-        chartMeta.style.fontSize = '12px';
-        chartMeta.style.color = '#333';
-        chartMeta.style.padding = '6px 8px';
         chartMeta.style.display = 'none';
-        // blend with light color scheme but remain readable on dark too
-        chartMeta.style.background = 'rgba(255,255,255,0.9)';
-        chartMeta.style.border = '1px solid rgba(0,0,0,0.06)';
-        chartMeta.style.borderRadius = '6px';
-        chartMeta.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
         chartMeta.style.zIndex = '1000';
-        chartMeta.style.cursor = 'pointer';
-        chartMeta.style.pointerEvents = 'auto'; // allow clicks to toggle
-        chartMeta.style.transition = 'all 160ms ease';
-        chartMeta.style.maxWidth = '340px';
-        chartMeta.style.overflow = 'hidden';
+        chartMeta.classList.add('chart-meta', 'collapsed');
         chartMeta.dataset.expanded = 'false';
         // Toggle expand/collapse on click
         chartMeta.addEventListener('click', (e) => {
             const expanded = chartMeta.dataset.expanded === 'true';
-            chartMeta.dataset.expanded = expanded ? 'false' : 'true';
+            const next = expanded ? 'false' : 'true';
+            chartMeta.dataset.expanded = next;
+            chartMeta.classList.toggle('expanded', next === 'true');
+            chartMeta.classList.toggle('collapsed', next !== 'true');
             if (chartMeta._meta) {
-                renderChartMeta(chartMeta._meta, chartMeta.dataset.expanded === 'true');
+                renderChartMeta(chartMeta._meta, next === 'true');
             }
             e.stopPropagation();
         });
 
         // Helper to render (collapsed or expanded)
         const round = (v) => (Number(v).toFixed && Number(v).toFixed(3)) ? Number(v.toFixed(3)) : v;
+
+        // Prefer explicit matchMedia checks, fallback to body class. Also observe body class changes.
+        const isDarkMode = () => {
+            try {
+                if (window.matchMedia) {
+                    const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
+                    const mqLight = window.matchMedia('(prefers-color-scheme: light)');
+                    if (mqDark.matches) return true;
+                    if (mqLight.matches) return false;
+                }
+            } catch (e) { /* ignore */ }
+            return document.body && document.body.classList && document.body.classList.contains('dark');
+        };
+
+        // No runtime color application here; CSS handles light/dark styles. This function remains for backward compatibility if needed.
+        const applyColorScheme = () => { /* noop — CSS handles scheme */ };
+
         const renderChartMeta = (meta, expanded) => {
             chartMeta._meta = meta;
+            applyColorScheme();
             if (!meta) {
                 chartMeta.style.display = 'none';
                 return;
             }
             chartMeta.style.display = 'block';
-            // detect dark mode to choose colors
-            const isDark = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) || document.body.classList.contains('dark');
-            const bg = isDark ? 'rgba(30,30,30,0.85)' : 'rgba(255,255,255,0.9)';
-            const color = isDark ? '#fff' : '#222';
-            const border = isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)';
-
-            chartMeta.style.background = bg;
-            chartMeta.style.color = color;
-            chartMeta.style.border = border;
 
             if (!expanded) {
                 // collapsed: icon-only compact badge
@@ -124,6 +121,10 @@ script.onload = () => {
 
         // expose renderer so we can call it later when receiving data
         chartMeta.renderChartMeta = renderChartMeta;
+
+        // No JS-based color listeners required — CSS handles scheme and html[data-theme] overrides.
+        // apply initial rendering state
+        // leave collapse/expand classes as set on creation; render will update visibility/content
 
         chart.appendChild(chartMeta);
     }

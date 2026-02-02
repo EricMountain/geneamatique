@@ -7,8 +7,19 @@
     <link rel="manifest" href="/manifest.json">
     <title>Genealogy Tree Viewer</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            font-family: Arial, Helvetica, sans-serif;
+            overflow: hidden;
+        }
 
         /* Theme variables - default (light) */
         :root {
@@ -22,8 +33,8 @@
             --node-fill: #fff;
             --node-stroke: steelblue;
             --node-stroke-selected: #0056b3;
-            --chart-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            --overlay-bg: rgba(255,255,255,0.95);
+            --chart-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --overlay-bg: rgba(255, 255, 255, 0.95);
             --spinner-border: #ddd;
             --spinner-top: #333;
         }
@@ -41,8 +52,8 @@
                 --node-fill: #061018;
                 --node-stroke: #3b82f6;
                 --node-stroke-selected: #60a5fa;
-                --chart-shadow: 0 6px 18px rgba(0,0,0,0.6);
-                --overlay-bg: rgba(8,10,12,0.85);
+                --chart-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+                --overlay-bg: rgba(8, 10, 12, 0.85);
                 --spinner-border: #333;
                 --spinner-top: #ddd;
             }
@@ -50,51 +61,300 @@
 
         /* Explicit user overrides */
         html[data-theme="dark"] {
-            --bg: #0b1220; --page-bg: #0b1220; --border: #22272b; --text: #e6eef8; --muted: #9aa0a6; --label: #7d8893; --link-stroke: #4b5563; --node-fill: #061018; --node-stroke: #3b82f6; --node-stroke-selected: #60a5fa; --chart-shadow: 0 6px 18px rgba(0,0,0,0.6); --overlay-bg: rgba(8,10,12,0.85); --spinner-border: #333; --spinner-top: #ddd;
+            --bg: #0b1220;
+            --page-bg: #0b1220;
+            --border: #22272b;
+            --text: #e6eef8;
+            --muted: #9aa0a6;
+            --label: #7d8893;
+            --link-stroke: #4b5563;
+            --node-fill: #061018;
+            --node-stroke: #3b82f6;
+            --node-stroke-selected: #60a5fa;
+            --chart-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+            --overlay-bg: rgba(8, 10, 12, 0.85);
+            --spinner-border: #333;
+            --spinner-top: #ddd;
         }
+
         html[data-theme="light"] {
-            --bg: #fafafa; --page-bg: #fff; --border: #ccc; --text: #333; --muted: #666; --label: #999; --link-stroke: #999; --node-fill: #fff; --node-stroke: steelblue; --node-stroke-selected: #0056b3; --chart-shadow: 0 4px 12px rgba(0,0,0,0.08); --overlay-bg: rgba(255,255,255,0.95); --spinner-border: #ddd; --spinner-top: #333;
+            --bg: #fafafa;
+            --page-bg: #fff;
+            --border: #ccc;
+            --text: #333;
+            --muted: #666;
+            --label: #999;
+            --link-stroke: #999;
+            --node-fill: #fff;
+            --node-stroke: steelblue;
+            --node-stroke-selected: #0056b3;
+            --chart-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --overlay-bg: rgba(255, 255, 255, 0.95);
+            --spinner-border: #ddd;
+            --spinner-top: #333;
         }
 
         /* Smooth color transitions */
-        html, body, #chart, .theme-toggle { transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+        html,
+        body,
+        #chart,
+        .theme-toggle {
+            transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
 
-        body { background: var(--bg); color: var(--text); }
+        body {
+            background: var(--bg);
+            color: var(--text);
+        }
 
         /* Controls bar */
-        #controls { padding:10px; display:flex; gap:8px; align-items:center; background: var(--page-bg); border-bottom: 1px solid var(--border); }
-        #person-search { flex:1; padding:8px; background:transparent; border:1px solid var(--border); color:var(--text); }
-        #search-btn { padding:8px 12px; background:transparent; border:1px solid var(--border); color:var(--text); }
+        #controls {
+            padding: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: var(--page-bg);
+            border-bottom: 1px solid var(--border);
+        }
+
+        #person-search {
+            flex: 1;
+            padding: 8px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        #search-btn {
+            padding: 8px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
 
         /* Chart container */
-        #chart { position: relative; width: calc(100% - 20px); height: calc(100% - 20px); margin: 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--page-bg); }
+        #chart {
+            position: relative;
+            width: calc(100% - 20px);
+            height: calc(100% - 20px);
+            margin: 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--page-bg);
+        }
 
-        svg { width: 100%; height: 100%; cursor: grab; }
-        svg.grabbing { cursor: grabbing; }
+        svg {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
 
-        .spinner { width: 16px; height: 16px; border: 2px solid var(--spinner-border); border-top-color: var(--spinner-top); border-radius: 50%; display: inline-block; vertical-align: middle; animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        svg.grabbing {
+            cursor: grabbing;
+        }
 
-        .chart-spinner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--overlay-bg); border-radius: 6px; padding: 12px 16px; display: flex; gap: 8px; align-items: center; box-shadow: var(--chart-shadow); font-size: 14px; color: var(--text); z-index: 500; }
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--spinner-border);
+            border-top-color: var(--spinner-top);
+            border-radius: 50%;
+            display: inline-block;
+            vertical-align: middle;
+            animation: spin 1s linear infinite;
+        }
 
-        .link { fill: none; stroke: var(--link-stroke); stroke-width: 1.5px; stroke-linecap: round; stroke-linejoin: round; }
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
 
-        .node rect { fill: var(--node-fill); stroke: var(--node-stroke); stroke-width: 2px; rx: 4; ry: 4; cursor: pointer; }
-        .node.expanded rect { stroke-width: 3px; stroke: var(--node-stroke-selected); }
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
-        .node text.name { font: bold 13px sans-serif; pointer-events: none; fill: var(--text); }
-        .node text.details { font: 10px sans-serif; pointer-events: none; fill: var(--muted); }
-        .node text.label { font: 10px sans-serif; pointer-events: none; fill: var(--label); }
+        .chart-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--overlay-bg);
+            border-radius: 6px;
+            padding: 12px 16px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            box-shadow: var(--chart-shadow);
+            font-size: 14px;
+            color: var(--text);
+            z-index: 500;
+        }
 
-        .node text.details, .node text.label { opacity: 0; transition: opacity 0.2s ease; }
-        .node.expanded text.details, .node.expanded text.label { opacity: 1; }
+        .link {
+            fill: none;
+            stroke: var(--link-stroke);
+            stroke-width: 1.5px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
 
-        #search-results { position:fixed; top:62px; left:10px; right:10px; max-height:200px; overflow:auto; display:none; background: var(--page-bg); border:1px solid var(--border); box-shadow: var(--chart-shadow); z-index:1000; }
+        .node rect {
+            fill: var(--node-fill);
+            stroke: var(--node-stroke);
+            stroke-width: 2px;
+            rx: 4;
+            ry: 4;
+            cursor: pointer;
+        }
 
-        .theme-toggle { background: var(--page-bg); color:var(--text); border:1px solid var(--border); padding:8px 12px; border-radius:20px; box-shadow: var(--chart-shadow); cursor:pointer; display:flex; gap:8px; align-items:center; font-size:13px; }
-        .theme-toggle.icon-only { padding:6px; border-radius:6px; width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; gap:0; margin-left:8px; }
-        .theme-toggle .icon { font-size:14px; }
-        .theme-toggle .label { display:none; }
+        .node.expanded rect {
+            stroke-width: 3px;
+            stroke: var(--node-stroke-selected);
+        }
+
+        .node text.name {
+            font: bold 13px sans-serif;
+            pointer-events: none;
+            fill: var(--text);
+        }
+
+        .node text.details {
+            font: 10px sans-serif;
+            pointer-events: none;
+            fill: var(--muted);
+        }
+
+        .node text.label {
+            font: 10px sans-serif;
+            pointer-events: none;
+            fill: var(--label);
+        }
+
+        .node text.details,
+        .node text.label {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .node.expanded text.details,
+        .node.expanded text.label {
+            opacity: 1;
+        }
+
+        #search-results {
+            position: fixed;
+            top: 62px;
+            left: 10px;
+            right: 10px;
+            max-height: 200px;
+            overflow: auto;
+            display: none;
+            background: var(--page-bg);
+            border: 1px solid var(--border);
+            box-shadow: var(--chart-shadow);
+            z-index: 1000;
+        }
+
+        .theme-toggle {
+            background: var(--page-bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            border-radius: 20px;
+            box-shadow: var(--chart-shadow);
+            cursor: pointer;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .theme-toggle.icon-only {
+            padding: 6px;
+            border-radius: 6px;
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            margin-left: 8px;
+        }
+
+        .theme-toggle .icon {
+            font-size: 14px;
+        }
+
+        .theme-toggle .label {
+            display: none;
+        }
+
+        /* Chart metadata badge (light/dark via variables) */
+        #chart .chart-meta {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            font-size: 12px;
+            display: none;
+            z-index: 1000;
+            cursor: pointer;
+            transition: all 160ms ease;
+            max-width: 340px;
+            overflow: hidden;
+            border-radius: 6px;
+            box-shadow: var(--chart-shadow);
+            color: var(--text);
+        }
+
+        #chart .chart-meta.collapsed {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border-radius: 14px;
+            white-space: nowrap;
+        }
+
+        #chart .chart-meta.expanded {
+            display: block;
+            padding: 8px 10px;
+            width: auto;
+            height: auto;
+            white-space: normal;
+        }
+
+        /* Badge - light mode default */
+        #chart .chart-meta {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            color: #333;
+        }
+
+        /* Badge - dark mode via system preference */
+        @media (prefers-color-scheme: dark) {
+            #chart .chart-meta {
+                background: rgba(30, 30, 30, 0.85);
+                border: 1px solid rgba(255, 255, 255, 0.06);
+                color: #e6eef8;
+            }
+        }
+
+        /* Badge - explicit light theme (override dark system preference) */
+        html[data-theme="light"] #chart .chart-meta {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            color: #333;
+        }
+
+        /* Badge - explicit dark theme */
+        html[data-theme="dark"] #chart .chart-meta {
+            background: rgba(30, 30, 30, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: #e6eef8;
+        }
     </style>
 </head>
 
@@ -102,7 +362,8 @@
     <div id="controls">
         <input id="person-search" placeholder="Search person by name or id" />
         <button id="search-btn">Search</button>
-        <button id="theme-toggle" class="theme-toggle icon-only" aria-pressed="false" title="Toggle theme" aria-label="Toggle theme">
+        <button id="theme-toggle" class="theme-toggle icon-only" aria-pressed="false" title="Toggle theme"
+            aria-label="Toggle theme">
             <span class="icon" aria-hidden="true">🌗</span>
             <span class="label">Theme</span>
         </button>
@@ -114,49 +375,49 @@
 
 
     <script>
-      (function(){
-        const root = document.documentElement;
-        const toggle = document.getElementById('theme-toggle');
-        const icon = toggle.querySelector('.icon');
-        const label = toggle.querySelector('.label');
+        (function () {
+            const root = document.documentElement;
+            const toggle = document.getElementById('theme-toggle');
+            const icon = toggle.querySelector('.icon');
+            const label = toggle.querySelector('.label');
 
-        function effectiveTheme() {
-          const forced = root.getAttribute('data-theme');
-          if (forced === 'dark' || forced === 'light') return forced;
-          return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
+            function effectiveTheme() {
+                const forced = root.getAttribute('data-theme');
+                if (forced === 'dark' || forced === 'light') return forced;
+                return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
 
-        function updateButton() {
-          const t = effectiveTheme();
-          toggle.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false');
-          icon.textContent = t === 'dark' ? '🌙' : '☀️';
-          label.textContent = t === 'dark' ? 'Dark' : 'Light';
-        }
+            function updateButton() {
+                const t = effectiveTheme();
+                toggle.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false');
+                icon.textContent = t === 'dark' ? '🌙' : '☀️';
+                label.textContent = t === 'dark' ? 'Dark' : 'Light';
+            }
 
-        // Initialize from saved preference if present
-        const saved = localStorage.getItem('theme');
-        if (saved === 'dark' || saved === 'light') {
-          root.setAttribute('data-theme', saved);
-        } else {
-          root.removeAttribute('data-theme');
-        }
+            // Initialize from saved preference if present
+            const saved = localStorage.getItem('theme');
+            if (saved === 'dark' || saved === 'light') {
+                root.setAttribute('data-theme', saved);
+            } else {
+                root.removeAttribute('data-theme');
+            }
 
-        updateButton();
+            updateButton();
 
-        // Listen to system theme changes (only if user hasn't forced a preference)
-        const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
-        if (mq && !localStorage.getItem('theme')) {
-          mq.addEventListener ? mq.addEventListener('change', updateButton) : mq.addListener(updateButton);
-        }
+            // Listen to system theme changes (only if user hasn't forced a preference)
+            const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+            if (mq && !localStorage.getItem('theme')) {
+                mq.addEventListener ? mq.addEventListener('change', updateButton) : mq.addListener(updateButton);
+            }
 
-        toggle.addEventListener('click', () => {
-          const current = effectiveTheme();
-          const next = current === 'dark' ? 'light' : 'dark';
-          root.setAttribute('data-theme', next);
-          localStorage.setItem('theme', next);
-          updateButton();
-        });
-      })();
+            toggle.addEventListener('click', () => {
+                const current = effectiveTheme();
+                const next = current === 'dark' ? 'light' : 'dark';
+                root.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                updateButton();
+            });
+        })();
     </script>
 
     <!-- d3 and elk are expected by ui/tree_viewer.js -->
