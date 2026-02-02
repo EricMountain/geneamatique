@@ -1208,6 +1208,13 @@ def store_data(individuals, db_name='data/genealogy.db'):
 
     conn.commit()
 
+    # Run ANALYZE to collect statistics for the query planner after a bulk import
+    try:
+        cursor.execute('ANALYZE')
+    except Exception as e:
+        # ANALYZE is non-essential; report and continue
+        print(f"ANALYZE failed: {e}")
+
     # Get count of unique canonical individuals
     cursor.execute('SELECT COUNT(*) FROM individuals')
     num_individuals = cursor.fetchone()[0]
