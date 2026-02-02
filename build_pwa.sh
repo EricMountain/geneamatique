@@ -9,7 +9,7 @@ popd >/dev/null
 
 echo "Installing lambda dependencies..."
 pushd lambda >/dev/null
-npm install --production
+npm install --omit=dev
 popd >/dev/null
 
 # Copy SQLite DB into the lambda package if present (do NOT commit real DBs to repo)
