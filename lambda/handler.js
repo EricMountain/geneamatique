@@ -233,9 +233,30 @@ exports.handler = async function (event) {
             const family_tree = params.family_tree || null;
             if (isNaN(id)) return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'missing or invalid id' }) };
 
+            const requestStart = process.hrtime.bigint();
             const db = dbOpen();
+
+            // Track DB timings and counts for metadata
+            const dbQueryTimes = [];
+            let dbQueryCount = 0;
+            let parentsCacheHits = 0;
+            let parentsCacheMisses = 0;
+
+            // Measured run for arbitrary SQL (used for PRAGMA)
+            const runStmt = (sql, params) => new Promise((resolve, reject) => {
+                const qStart = process.hrtime.bigint();
+                db.run(sql, params || [], function (err) {
+                    const qEnd = process.hrtime.bigint();
+                    const ms = Number(qEnd - qStart) / 1e6;
+                    dbQueryTimes.push(ms);
+                    dbQueryCount++;
+                    err ? reject(err) : resolve(this);
+                });
+            });
+
             // Prefer in-memory temporary storage for GROUP BY / ORDER BY temp tables used by queries
-            try { db.run('PRAGMA temp_store = MEMORY'); } catch (e) { /* ignore if not supported */ }
+            try { await runStmt('PRAGMA temp_store = MEMORY'); } catch (e) { /* ignore if not supported */ }
+
             const max_depth = process.env.GENEALOGY_MAX_DEPTH ? parseInt(process.env.GENEALOGY_MAX_DEPTH, 10) : 10;
 
             const recordToNode = (row, family_tree) => ({
@@ -257,8 +278,31 @@ exports.handler = async function (event) {
             });
 
             // Prepare commonly-used statements and small helpers (per-request)
-            const stmtAll = (stmt, params) => new Promise((resolve, reject) => stmt.all(params || [], (err, rows) => err ? reject(err) : resolve(rows)));
-            const stmtGet = (stmt, params) => new Promise((resolve, reject) => stmt.get(params || [], (err, row) => err ? reject(err) : resolve(row)));
+            const stmtAll = (stmt, params) => new Promise((resolve, reject) => {
+                const qStart = process.hrtime.bigint();
+                // count per-statement usage if known
+                const sname = stmtToName.get(stmt);
+                if (sname) stmtCounts[sname] = (stmtCounts[sname] || 0) + 1;
+                stmt.all(params || [], (err, rows) => {
+                    const qEnd = process.hrtime.bigint();
+                    const ms = Number(qEnd - qStart) / 1e6;
+                    dbQueryTimes.push(ms);
+                    dbQueryCount++;
+                    err ? reject(err) : resolve(rows);
+                });
+            });
+            const stmtGet = (stmt, params) => new Promise((resolve, reject) => {
+                const qStart = process.hrtime.bigint();
+                const sname = stmtToName.get(stmt);
+                if (sname) stmtCounts[sname] = (stmtCounts[sname] || 0) + 1;
+                stmt.get(params || [], (err, row) => {
+                    const qEnd = process.hrtime.bigint();
+                    const ms = Number(qEnd - qStart) / 1e6;
+                    dbQueryTimes.push(ms);
+                    dbQueryCount++;
+                    err ? reject(err) : resolve(row);
+                });
+            });
 
             const baseSelect = `SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type as relationship_type, r.family_tree as family_tree FROM relationships r JOIN individuals i ON r.parent_id = i.id`;
 
@@ -270,20 +314,40 @@ exports.handler = async function (event) {
                 findTreesForIndividual: db.prepare(`SELECT DISTINCT family_tree as family_tree FROM relationships WHERE parent_id = ? OR child_id = ?`)
             };
 
+            // Map prepared stmts -> name and initialize counters
+            const stmtToName = new Map();
+            const stmtCounts = {};
+            for (const [k, v] of Object.entries(stmts)) {
+                stmtToName.set(v, k);
+                stmtCounts[k] = 0;
+            };
+
             const parentsCache = new Map(); // memoize getParents for this request
 
             const getParents = async (individual_id, fam_tree) => {
                 const key = `${individual_id}|${fam_tree || ''}`;
-                if (parentsCache.has(key)) return parentsCache.get(key);
-
-                if (fam_tree) {
-                    const rows = await stmtAll(stmts.getParentsWithTree, [individual_id, fam_tree]);
-                    if (rows && rows.length) { parentsCache.set(key, rows); return rows; }
+                if (parentsCache.has(key)) {
+                    parentsCacheHits++;
+                    return parentsCache.get(key);
                 }
 
-                const rows = await stmtAll(stmts.getParents, [individual_id]);
-                parentsCache.set(key, rows || []);
-                return rows;
+                // Cache miss
+                parentsCacheMisses++;
+
+                if (fam_tree) {
+                    let rows = await stmtAll(stmts.getParentsWithTree, [individual_id, fam_tree]);
+                    if (rows && rows.length) {
+                        parentsCache.set(key, rows);
+                        return rows;
+                    }
+                    rows = await stmtAll(stmts.getParents, [individual_id]);
+                    parentsCache.set(key, rows || []);
+                    return rows;
+                } else {
+                    const rows = await stmtAll(stmts.getParents, [individual_id]);
+                    parentsCache.set(key, rows || []);
+                    return rows;
+                }
             };
 
             // recursive builders
@@ -333,6 +397,19 @@ exports.handler = async function (event) {
                 return node;
             };
 
+            const computeDbStats = (times) => {
+                if (!times || times.length === 0) return { min: 0, max: 0, avg: 0, stddev: 0 };
+                const n = times.length;
+                const min = Math.min(...times);
+                const max = Math.max(...times);
+                const sum = times.reduce((a, b) => a + b, 0);
+                const avg = sum / n;
+                const variance = times.reduce((acc, x) => acc + Math.pow(x - avg, 2), 0) / n;
+                const stddev = Math.sqrt(variance);
+                const round = (v) => Number(v.toFixed(3));
+                return { min: round(min), max: round(max), avg: round(avg), stddev: round(stddev) };
+            };
+
             const finalizeStmts = () => {
                 try {
                     for (const s of Object.values(stmts)) {
@@ -344,15 +421,44 @@ exports.handler = async function (event) {
             try {
                 // Always build ancestor tree (descendants not supported anymore)
                 const tree = await buildAncestor(id, family_tree, max_depth);
+
+                // Compute timing/DB metadata
                 finalizeStmts();
-                db.close();
-                if (!tree) return { statusCode: 404, headers: jsonHeaders, body: JSON.stringify({ error: 'not found' }) };
-                return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify(tree) };
+                try { db.close(); } catch (e) { /* ignore */ }
+                const requestEnd = process.hrtime.bigint();
+                const responseTimeMs = Number(requestEnd - requestStart) / 1e6;
+                const dbStats = computeDbStats(dbQueryTimes);
+                const meta = {
+                    response_time_ms: Number(responseTimeMs.toFixed(3)),
+                    db_queries: dbQueryCount,
+                    db_time_ms: dbStats,
+                    parents_cache: {
+                        hits: parentsCacheHits,
+                        misses: parentsCacheMisses
+                    },
+                    prepared_statement_counts: { ...stmtCounts }
+                };
+
+                if (!tree) return { statusCode: 404, headers: jsonHeaders, body: JSON.stringify({ error: 'not found', meta }) };
+                return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ tree, meta }) };
             } catch (err) {
                 finalizeStmts();
-                db.close();
+                try { db.close(); } catch (e) { /* ignore */ }
+                const requestEnd = process.hrtime.bigint();
+                const responseTimeMs = Number(requestEnd - requestStart) / 1e6;
+                const dbStats = computeDbStats(dbQueryTimes);
+                const meta = {
+                    response_time_ms: Number(responseTimeMs.toFixed(3)),
+                    db_queries: dbQueryCount,
+                    db_time_ms: dbStats,
+                    parents_cache: {
+                        hits: parentsCacheHits,
+                        misses: parentsCacheMisses
+                    },
+                    prepared_statement_counts: { ...stmtCounts }
+                };
                 console.error('tree error', err);
-                return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: err && err.message }) };
+                return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: err && err.message, meta }) };
             }
         }
 

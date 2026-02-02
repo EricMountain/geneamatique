@@ -12,7 +12,7 @@ script.onload = () => {
     const input = document.getElementById('person-search');
     const btn = document.getElementById('search-btn');
     const results = document.getElementById('search-results');
-    
+
     // Create lightweight spinner elements (added to DOM if not present)
     let searchSpinner = document.getElementById('search-spinner');
     if (!searchSpinner) {
@@ -32,6 +32,100 @@ script.onload = () => {
         chartSpinner.style.display = 'none';
         chartSpinner.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px"></span><span>Loading…</span>';
         chart.appendChild(chartSpinner);
+    }
+
+    // Small metadata display (response times, DB stats) — positioned discreetly at top-right
+    // Ensure the chart can position children absolutely
+    if (chart.style.position !== 'relative' && chart.style.position !== 'absolute') chart.style.position = 'relative';
+    let chartMeta = document.getElementById('chart-meta');
+    if (!chartMeta) {
+        chartMeta = document.createElement('div');
+        chartMeta.id = 'chart-meta';
+        chartMeta.style.position = 'absolute';
+        chartMeta.style.top = '6px';
+        chartMeta.style.right = '6px';
+        chartMeta.style.fontSize = '12px';
+        chartMeta.style.color = '#333';
+        chartMeta.style.padding = '6px 8px';
+        chartMeta.style.display = 'none';
+        // blend with light color scheme but remain readable on dark too
+        chartMeta.style.background = 'rgba(255,255,255,0.9)';
+        chartMeta.style.border = '1px solid rgba(0,0,0,0.06)';
+        chartMeta.style.borderRadius = '6px';
+        chartMeta.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
+        chartMeta.style.zIndex = '1000';
+        chartMeta.style.cursor = 'pointer';
+        chartMeta.style.pointerEvents = 'auto'; // allow clicks to toggle
+        chartMeta.style.transition = 'all 160ms ease';
+        chartMeta.style.maxWidth = '340px';
+        chartMeta.style.overflow = 'hidden';
+        chartMeta.dataset.expanded = 'false';
+        // Toggle expand/collapse on click
+        chartMeta.addEventListener('click', (e) => {
+            const expanded = chartMeta.dataset.expanded === 'true';
+            chartMeta.dataset.expanded = expanded ? 'false' : 'true';
+            if (chartMeta._meta) {
+                renderChartMeta(chartMeta._meta, chartMeta.dataset.expanded === 'true');
+            }
+            e.stopPropagation();
+        });
+
+        // Helper to render (collapsed or expanded)
+        const round = (v) => (Number(v).toFixed && Number(v).toFixed(3)) ? Number(v.toFixed(3)) : v;
+        const renderChartMeta = (meta, expanded) => {
+            chartMeta._meta = meta;
+            if (!meta) {
+                chartMeta.style.display = 'none';
+                return;
+            }
+            chartMeta.style.display = 'block';
+            // detect dark mode to choose colors
+            const isDark = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) || document.body.classList.contains('dark');
+            const bg = isDark ? 'rgba(30,30,30,0.85)' : 'rgba(255,255,255,0.9)';
+            const color = isDark ? '#fff' : '#222';
+            const border = isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)';
+
+            chartMeta.style.background = bg;
+            chartMeta.style.color = color;
+            chartMeta.style.border = border;
+
+            if (!expanded) {
+                // collapsed: icon-only compact badge
+                chartMeta.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:14px;font-weight:700;">⏱</div>`;
+                // no tooltip; keep collapsed compact
+                chartMeta.style.padding = '0';
+                chartMeta.style.width = '28px';
+                chartMeta.style.height = '28px';
+                chartMeta.style.whiteSpace = 'nowrap';
+            } else {
+                // expanded: show full metrics (no helper text)
+                const db = meta.db_time_ms || {};
+                // Build prepared statement counts display if present
+                let countsHtml = '';
+                if (meta.prepared_statement_counts) {
+                    countsHtml = '<div style="font-size:11px; margin-top:6px;">';
+                    countsHtml += Object.entries(meta.prepared_statement_counts).map(([k, v]) => ` <span style="display:inline-block; margin-right:10px; color:var(--meta-muted,#666)">${k}: <strong>${v}</strong></span>`).join('');
+                    countsHtml += '</div>';
+                }
+                chartMeta.innerHTML = `
+                    <div style="font-weight:600; margin-bottom:6px;">⏱ ${round(meta.response_time_ms)}ms — ${meta.db_queries} DB queries</div>
+                    <div style="font-size:11px; color:var(--meta-muted, #555); line-height:1.3">
+                        DB time (ms): min <strong>${db.min}</strong>&nbsp; max <strong>${db.max}</strong>&nbsp; avg <strong>${db.avg}</strong>&nbsp; std <strong>${db.stddev}</strong><br/>
+                        Parents cache: hits <strong>${meta.parents_cache.hits}</strong> / misses <strong>${meta.parents_cache.misses}</strong>
+                    </div>
+                    ${countsHtml}
+                `;
+                chartMeta.style.whiteSpace = 'normal';
+                chartMeta.style.padding = '8px 10px';
+                chartMeta.style.width = '';
+                chartMeta.style.height = '';
+            }
+        };
+
+        // expose renderer so we can call it later when receiving data
+        chartMeta.renderChartMeta = renderChartMeta;
+
+        chart.appendChild(chartMeta);
     }
 
     function setSearchLoading(loading) {
@@ -111,7 +205,20 @@ script.onload = () => {
                 window.showTreeError('No tree data returned');
                 return;
             }
-            window.setTreeRoot(data);
+            // Backwards compatible: if the server returns { tree, meta } unwrap it
+            const root = (data && data.tree) ? data.tree : data;
+            window.setTreeRoot(root);
+
+            // Expose metadata for debugging / display (collapsed by default)
+            if (data && data.meta) {
+                window.latestTreeMeta = data.meta;
+                // default to collapsed view on new response
+                chartMeta.dataset.expanded = 'false';
+                if (chartMeta.renderChartMeta) chartMeta.renderChartMeta(data.meta, false);
+            } else {
+                if (chartMeta.renderChartMeta) chartMeta.renderChartMeta(null, false);
+            }
+
             // Persist last successful id so we can rehydrate the last view on reload
             try {
                 localStorage.setItem('last_db_id', String(id));
