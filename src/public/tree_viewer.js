@@ -190,7 +190,20 @@ async function render() {
         });
 
         if (node.children) {
-            node.children.forEach(child => {
+            // Sort parents so that fathers (even SOSA ids) appear above mothers (odd SOSA ids).
+            // Use `sosa` if available, fall back to `old_id`; unknown parity goes last to keep layout deterministic.
+            const children = node.children.slice();
+            children.sort((a, b) => {
+                const sa = (typeof a.sosa === 'number') ? a.sosa : ((typeof a.old_id === 'number') ? a.old_id : null);
+                const sb = (typeof b.sosa === 'number') ? b.sosa : ((typeof b.old_id === 'number') ? b.old_id : null);
+                const pa = (sa === null) ? 2 : (sa % 2 === 0 ? 0 : 1);
+                const pb = (sb === null) ? 2 : (sb % 2 === 0 ? 0 : 1);
+                if (pa !== pb) return pa - pb; // even (0) before odd (1), unknown (2) last
+                if (sa !== null && sb !== null && sa !== sb) return sa - sb; // stable by sosa number
+                return 0; // keep original order otherwise
+            });
+
+            children.forEach(child => {
                 elkEdges.push({
                     id: `e${node.db_id}-${child.db_id}`,
                     sources: [String(node.db_id)],
