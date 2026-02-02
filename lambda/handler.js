@@ -256,21 +256,17 @@ exports.handler = async function (event) {
 
             // helpers
             const getParents = async (individual_id, fam_tree) => {
-                // family_tree-aware query (falls back)
+                // Query parents using the relationships + individuals tables only (no instance join)
+                const baseSelect = `SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type as relationship_type, r.family_tree as family_tree FROM relationships r JOIN individuals i ON r.parent_id = i.id`;
+
                 if (fam_tree) {
-                    let rows = await dbAll(db, `SELECT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type as relationship_type, iti.family_tree as family_tree
-                        FROM relationships r JOIN individuals i ON r.parent_id = i.id JOIN individual_tree_instances iti ON i.id = iti.individual_id
-                        WHERE r.child_id = ? AND r.family_tree = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`, [individual_id, fam_tree]);
+                    let rows = await dbAll(db, `${baseSelect} WHERE r.child_id = ? AND r.family_tree = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`, [individual_id, fam_tree]);
                     if (rows && rows.length) return rows;
                     // fallback to any tree
-                    rows = await dbAll(db, `SELECT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type as relationship_type, r.family_tree as family_tree
-                        FROM relationships r JOIN individuals i ON r.parent_id = i.id JOIN individual_tree_instances iti ON i.id = iti.individual_id
-                        WHERE r.child_id = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`, [individual_id]);
+                    rows = await dbAll(db, `${baseSelect} WHERE r.child_id = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`, [individual_id]);
                     return rows;
                 } else {
-                    const rows = await dbAll(db, `SELECT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type as relationship_type, r.family_tree as family_tree
-                        FROM relationships r JOIN individuals i ON r.parent_id = i.id JOIN individual_tree_instances iti ON i.id = iti.individual_id
-                        WHERE r.child_id = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`, [individual_id]);
+                    const rows = await dbAll(db, `${baseSelect} WHERE r.child_id = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`, [individual_id]);
                     return rows;
                 }
             };
@@ -293,13 +289,18 @@ exports.handler = async function (event) {
                 // get parents
                 let parents = await getParents(individual_id, fam_tree);
                 if (!parents && node.date_of_birth && node.name) {
-                    const others = await dbAll(db, `SELECT DISTINCT i.id as id, iti.family_tree as family_tree FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?`, [node.name, node.date_of_birth, individual_id]);
+                    // Find other individuals with the same canonical name + DOB (no instance join needed)
+                    const others = await dbAll(db, `SELECT DISTINCT i.id as id FROM individuals i WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?`, [node.name, node.date_of_birth, individual_id]);
                     for (const o of others) {
-                        parents = await getParents(o.id, o.family_tree);
-                        if (parents && parents.length) {
-                            const otherNode = await buildAncestor(o.id, o.family_tree, maxDepth, visited, depth, sosa);
-                            db.close();
-                            return otherNode;
+                        // For each matching individual, discover which family trees reference them via the relationships table
+                        const trees = await dbAll(db, `SELECT DISTINCT family_tree FROM relationships WHERE parent_id = ? OR child_id = ?`, [o.id, o.id]);
+                        for (const t of trees) {
+                            parents = await getParents(o.id, t.family_tree);
+                            if (parents && parents.length) {
+                                const otherNode = await buildAncestor(o.id, t.family_tree, maxDepth, visited, depth, sosa);
+                                db.close();
+                                return otherNode;
+                            }
                         }
                     }
                 }
