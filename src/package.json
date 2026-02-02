@@ -4,7 +4,7 @@
     "private": true,
     "scripts": {
         "dev": "vite",
-        "build": "vite build",
+        "build": "vite build --emptyOutDir",
         "preview": "vite preview --port 5000",
         "audit:fix": "npm audit fix",
         "audit:fix:force": "npm audit fix --force"
