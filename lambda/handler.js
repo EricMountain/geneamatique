@@ -275,13 +275,12 @@ exports.handler = async function (event) {
             const buildAncestor = async (individual_id, fam_tree, maxDepth, visited = new Set(), depth = 0, sosa = 1) => {
                 if (visited.has(individual_id) || depth > maxDepth) return null;
                 visited.add(individual_id);
-                let row = await dbGet(db, `SELECT i.id as id, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment
-                    FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id WHERE i.id = ? AND iti.family_tree = ?`, [individual_id, fam_tree]);
+                // Fetch canonical individual data directly (no instance join necessary)
+                let row = await dbGet(db, `SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment
+                    FROM individuals i WHERE i.id = ?`, [individual_id]);
                 if (!row) {
-                    // no instance in this family_tree: try to pick any instance for this id
-                    row = await dbGet(db, `SELECT i.id as id, iti.family_tree as family_tree, iti.old_id as old_id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment
-                        FROM individuals i JOIN individual_tree_instances iti ON i.id = iti.individual_id WHERE i.id = ? LIMIT 1`, [individual_id]);
-                    if (!row) return null;
+                    // If even the canonical individual is not found, nothing to do
+                    return null;
                 }
                 const node = recordToNode(row, fam_tree);
                 node.sosa = sosa;

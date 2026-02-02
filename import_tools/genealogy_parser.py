@@ -96,10 +96,9 @@ def create_database(db_name='data/genealogy.db'):
     # Covering index for common getParents query (child_id, family_tree, relationship_type, parent_id)
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_relationships_child_family_reltype_parent ON relationships(child_id, family_tree, relationship_type, parent_id)')
 
-    # Indexes on individual_tree_instances used by joins and lookups in buildAncestor/getParents
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_iti_individual_family ON individual_tree_instances(individual_id, family_tree)')
+    # Index on individual_tree_instances used by import-time lookups (family_tree, old_id)
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_iti_family_old ON individual_tree_instances(family_tree, old_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_iti_individual ON individual_tree_instances(individual_id)')
+    # NOTE: other instance indexes removed because runtime `/api/tree` queries no longer join to this table
 
     # Index on individuals for name+dob lookups (used when trying alternate instances by name and DOB)
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_individuals_name_dob ON individuals(canonical_name, date_of_birth)')
