@@ -104,6 +104,13 @@ script.onload = () => {
                     countsHtml += Object.entries(meta.prepared_statement_counts).map(([k, v]) => ` <span style="display:inline-block; margin-right:10px; color:var(--meta-muted,#666)">${k}: <strong>${v}</strong></span>`).join('');
                     countsHtml += '</div>';
                 }
+                // Build prepared statement timing display if present
+                let timesHtml = '';
+                if (meta.prepared_statement_times_ms) {
+                    timesHtml = '<div style="font-size:11px; margin-top:6px;">';
+                    timesHtml += Object.entries(meta.prepared_statement_times_ms).map(([k, v]) => ` <span style="display:inline-block; margin-right:10px; color:var(--meta-muted,#666)">${k}: <strong>${round(v)}ms</strong></span>`).join('');
+                    timesHtml += '</div>';
+                }
                 chartMeta.innerHTML = `
                     <div style="font-weight:600; margin-bottom:6px;">⏱ ${round(meta.response_time_ms)}ms — ${meta.db_queries} DB queries</div>
                     <div style="font-size:11px; color:var(--meta-muted, #555); line-height:1.3">
@@ -111,6 +118,7 @@ script.onload = () => {
                         Parents cache: hits <strong>${meta.parents_cache.hits}</strong> / misses <strong>${meta.parents_cache.misses}</strong>
                     </div>
                     ${countsHtml}
+                    ${timesHtml}
                 `;
                 chartMeta.style.whiteSpace = 'normal';
                 chartMeta.style.padding = '8px 10px';

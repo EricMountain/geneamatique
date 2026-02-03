@@ -37,7 +37,7 @@ function corsHeaders() {
         'Access-Control-Allow-Headers': 'Content-Type,x-api-key,Authorization',
         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
     };
-} 
+}
 
 async function checkApiKey(key) {
     if (!TABLE) return false;
@@ -287,7 +287,6 @@ exports.handler = async function (event) {
             // Prepare commonly-used statements and small helpers (per-request)
             const stmtAll = (stmt, params) => new Promise((resolve, reject) => {
                 const qStart = process.hrtime.bigint();
-                // count per-statement usage if known
                 const sname = stmtToName.get(stmt);
                 if (sname) stmtCounts[sname] = (stmtCounts[sname] || 0) + 1;
                 stmt.all(params || [], (err, rows) => {
@@ -295,6 +294,7 @@ exports.handler = async function (event) {
                     const ms = Number(qEnd - qStart) / 1e6;
                     dbQueryTimes.push(ms);
                     dbQueryCount++;
+                    if (sname) stmtTimes[sname] = (stmtTimes[sname] || 0) + ms;
                     err ? reject(err) : resolve(rows);
                 });
             });
@@ -307,6 +307,7 @@ exports.handler = async function (event) {
                     const ms = Number(qEnd - qStart) / 1e6;
                     dbQueryTimes.push(ms);
                     dbQueryCount++;
+                    if (sname) stmtTimes[sname] = (stmtTimes[sname] || 0) + ms;
                     err ? reject(err) : resolve(row);
                 });
             });
@@ -321,12 +322,14 @@ exports.handler = async function (event) {
                 findTreesForIndividual: db.prepare(`SELECT DISTINCT family_tree as family_tree FROM relationships WHERE parent_id = ? OR child_id = ?`)
             };
 
-            // Map prepared stmts -> name and initialize counters
+            // Map prepared stmts -> name and initialize counters and timing
             const stmtToName = new Map();
             const stmtCounts = {};
+            const stmtTimes = {};
             for (const [k, v] of Object.entries(stmts)) {
                 stmtToName.set(v, k);
                 stmtCounts[k] = 0;
+                stmtTimes[k] = 0;
             };
 
             const parentsCache = new Map(); // memoize getParents for this request
@@ -443,7 +446,8 @@ exports.handler = async function (event) {
                         hits: parentsCacheHits,
                         misses: parentsCacheMisses
                     },
-                    prepared_statement_counts: { ...stmtCounts }
+                    prepared_statement_counts: { ...stmtCounts },
+                    prepared_statement_times_ms: Object.fromEntries(Object.entries(stmtTimes).map(([k, v]) => [k, Number(v.toFixed(3))]))
                 };
 
                 if (!tree) return { statusCode: 404, headers: jsonHeaders, body: JSON.stringify({ error: 'not found', meta }) };
@@ -462,7 +466,8 @@ exports.handler = async function (event) {
                         hits: parentsCacheHits,
                         misses: parentsCacheMisses
                     },
-                    prepared_statement_counts: { ...stmtCounts }
+                    prepared_statement_counts: { ...stmtCounts },
+                    prepared_statement_times_ms: Object.fromEntries(Object.entries(stmtTimes).map(([k, v]) => [k, Number(v.toFixed(3))]))
                 };
                 console.error('tree error', err);
                 return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: err && err.message, meta }) };
