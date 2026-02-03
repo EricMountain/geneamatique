@@ -24,13 +24,20 @@ const ALLOWED_USERS_TABLE = process.env.ALLOWED_USERS_TABLE; // DynamoDB table t
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // Google OAuth Client ID used to validate ID tokens
 const dynamo = new DynamoDBClient({});
 
+// Safety: prevent LOCAL_DEV mode from being enabled in production Lambda environments.
+// This protects against accidentally deploying with authentication disabled.
+if (process.env.LOCAL_DEV === '1' && process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    console.error('LOCAL_DEV must not be set in production Lambda environment');
+    throw new Error('LOCAL_DEV must not be set in production Lambda environment');
+}
+
 function corsHeaders() {
     return {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type,x-api-key,Authorization',
         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
     };
-}
+} 
 
 async function checkApiKey(key) {
     if (!TABLE) return false;

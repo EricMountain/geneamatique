@@ -22,3 +22,12 @@ API endpoints:
 - `GET /api/tree?id=<db_id>&family_tree=<tree>` — generate an ancestor tree JSON for the chosen individual using the SQLite DB. Returns the nested node structure used by the frontend viewer. (Note: descendant trees and `max_depth` query params are no longer supported.)
 
 Security: API endpoints are authenticated with the same API key mechanism as static content.
+
+### Local development
+For local development there's a tiny Express-based dev server that forwards HTTP requests to the Lambda handler and runs with `LOCAL_DEV=1` so authentication is disabled for convenience.
+
+- Install JS deps: `(cd lambda && npm install)`
+- Start the local lambda dev server: `(cd lambda && npm run dev)`. Default port: `3001` (override with `PORT=...`).
+- To run both frontend and backend at once use `make dev_local` from the repo root — this runs the lambda dev server in background and the Vite frontend in the foreground.
+
+The Lambda handler contains a safety check and will refuse to run if `LOCAL_DEV` is set in an actual Lambda environment to prevent disabling authentication in production.

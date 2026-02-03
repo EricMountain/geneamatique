@@ -18,6 +18,21 @@ This repo parses genealogy tables from ODT files into an SQLite database, then p
 - Visualize trees: run tree_visualizer.py <name_or_id>.
 - Always use `local_import_data.sh` to recreate and import data. It ignores files that contain inconsistent data.
 
+### Local development (frontend + backend) ✅
+For convenience, you can run the frontend PWA and a local backend together. In local mode the backend explicitly disables authentication — this is only allowed locally.
+
+1. Install JS deps:
+   - (cd lambda && npm install)
+   - (cd src && npm install)
+2. Start both servers:
+   - `make dev_local`
+   - Backend: http://localhost:3001 (API endpoints under `/api/`)
+   - Frontend (Vite dev): http://localhost:5173 or the URL printed by `npm run dev`
+
+Notes:
+- The backend sets `LOCAL_DEV=1` in the helper dev server; the Lambda `handler.js` will refuse to run if `LOCAL_DEV` is set in a real Lambda environment to prevent disabling authentication in production.
+- Use this mode only for local testing and development.
+
 ## How to Test
 - Run unit tests with unittest.
 - Suggested command: python -m unittest test_genealogy_parser.py -v
