@@ -233,11 +233,10 @@ exports.handler = async function (event) {
             }
         }
 
-        // GET /api/tree?id=123&type=ancestor|descendant&family_tree=...&max_depth=6
+        // GET /api/tree?id=123&type=ancestor|descendant&max_depth=6
         if (reqPath.startsWith('/api/tree')) {
             const params = event.queryStringParameters || {};
             const id = params.id ? parseInt(params.id, 10) : NaN;
-            const family_tree = params.family_tree || null;
             if (isNaN(id)) return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'missing or invalid id' }) };
 
             const requestStart = process.hrtime.bigint();
@@ -266,7 +265,7 @@ exports.handler = async function (event) {
 
             const max_depth = process.env.GENEALOGY_MAX_DEPTH ? parseInt(process.env.GENEALOGY_MAX_DEPTH, 10) : 10;
 
-            const recordToNode = (row, family_tree) => ({
+            const recordToNode = (row) => ({
                 db_id: row.id,
                 name: row.canonical_name,
                 name_comment: row.name_comment,
@@ -279,7 +278,7 @@ exports.handler = async function (event) {
                 marriage_date: row.marriage_date,
                 marriage_location: row.marriage_location,
                 marriage_comment: row.marriage_comment,
-                family_tree: family_tree,
+                family_tree: null,
                 sosa: null,
                 children: []
             });
@@ -420,6 +419,7 @@ exports.handler = async function (event) {
 
                 // Use prefetched relationships, deduplicating by parent id + relationship type
                 // (same parent may appear in multiple family_tree sources)
+                // TODO: check if deduping is needed
                 const byChild = parentsByChild.get(individual_id);
                 if (byChild) {
                     const seen = new Set();
@@ -446,7 +446,7 @@ exports.handler = async function (event) {
             };
 
             // recursive builders
-            const buildAncestor = async (individual_id, fam_tree, maxDepth, visited = new Set(), depth = 0, sosa = 1) => {
+            const buildAncestor = async (individual_id, maxDepth, visited = new Set(), depth = 0, sosa = 1) => {
                 if (visited.has(individual_id) || depth > maxDepth) return null;
                 visited.add(individual_id);
 
@@ -457,7 +457,7 @@ exports.handler = async function (event) {
                 }
                 if (!row) return null;
 
-                const node = recordToNode(row, fam_tree);
+                const node = recordToNode(row);
                 node.sosa = sosa;
 
                 // get parents (no family_tree filtering — we trace ancestry
@@ -474,8 +474,11 @@ exports.handler = async function (event) {
                     if (mother) toAdd.push([mother, sosa * 2 + 1]);
                     if (father) toAdd.push([father, sosa * 2]);
                     for (const [p, parentSosa] of toAdd) {
-                        const childNode = await buildAncestor(p.id, p.family_tree || fam_tree, maxDepth, visited, depth + 1, parentSosa);
-                        if (childNode) node.children.push(childNode);
+                        const childNode = await buildAncestor(p.id, maxDepth, visited, depth + 1, parentSosa);
+                        if (childNode) {
+                            childNode.family_tree = p.family_tree || childNode.family_tree;
+                            node.children.push(childNode);
+                        }
                     }
                 }
                 return node;
@@ -503,8 +506,7 @@ exports.handler = async function (event) {
             };
 
             try {
-                // Always build ancestor tree (descendants not supported anymore)
-                const tree = await buildAncestor(id, family_tree, max_depth);
+                const tree = await buildAncestor(id, max_depth);
 
                 // Compute timing/DB metadata
                 finalizeStmts();

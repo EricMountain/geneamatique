@@ -220,7 +220,7 @@ script.onload = () => {
             el.onclick = () => {
                 results.style.display = 'none';
                 input.value = item.canonical_name;
-                // We deliberately pass only the db id; the server will pick an instance if family_tree is not supplied
+                // We deliberately pass only the db id; the server ignores any family_tree parameter and traces ancestry across all sources
                 fetchTreeFor(item.id);
             };
             results.appendChild(el);

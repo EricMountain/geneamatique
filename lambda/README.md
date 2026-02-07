@@ -18,8 +18,8 @@ Build / deploy steps:
 Requests to the site must present the API key via `x-api-key` header or `Authorization: ApiKey <key>`.
 
 API endpoints:
-- `GET /api/individuals?q=<query>` — search individuals by name (substring) or old_id (numeric). Returns JSON array of matches: `{ id, family_tree, old_id, canonical_name, name_comment, date_of_birth }`.
-- `GET /api/tree?id=<db_id>&family_tree=<tree>` — generate an ancestor tree JSON for the chosen individual using the SQLite DB. Returns the nested node structure used by the frontend viewer. (Note: descendant trees and `max_depth` query params are no longer supported.)
+- `GET /api/individuals?q=<query>` — search individuals by name (substring) or old_id (numeric). Returns JSON array of matches: `{ id, canonical_name, name_comment, date_of_birth }`.
+- `GET /api/tree?id=<db_id>` — generate an ancestor tree JSON for the chosen individual using the SQLite DB. Returns the nested node structure used by the frontend viewer. (Note: descendant trees and `max_depth` query params are no longer supported.)
 
 Security: API endpoints are authenticated with the same API key mechanism as static content.
 
