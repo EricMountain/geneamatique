@@ -33,6 +33,32 @@ Notes:
 - The backend sets `LOCAL_DEV=1` in the helper dev server; the Lambda `handler.js` will refuse to run if `LOCAL_DEV` is set in a real Lambda environment to prevent disabling authentication in production.
 - Use this mode only for local testing and development.
 
+### Debugging & manual testing (local) 🔧
+When developing, you can run the backend locally and either call it over HTTP or invoke the handler directly. Quick commands and tips:
+
+- Start the backend dev server (background):
+  - `node lambda/dev_server.js &`  # prints PID
+  - Foreground (see logs): `node lambda/dev_server.js`
+- Start the frontend dev server:
+  - `(cd src && npm run dev)`
+  - Or run both with `make dev_local`
+- Build production PWA bundle (used by Lambda):
+  - `./build_pwa.sh`  # outputs to `lambda/dist`
+
+- Call endpoints:
+  - Over HTTP: `curl -sS "http://localhost:3001/api/tree?id=1" | jq '.'`
+  - Inspect metrics: `curl -sS "http://localhost:3001/api/tree?id=1" | jq '.meta.prepared_statement_metrics'`
+
+- Invoke handler directly (no HTTP):
+  - `node -e "process.env.LOCAL_DEV='1'; (async()=>{ const h=require('./lambda/handler').handler; const ev={ rawPath:'/api/tree', path:'/api/tree', rawQueryString:'id=1', queryStringParameters:{id:'1'}, headers:{}, requestContext:{http:{method:'GET'}}, httpMethod:'GET' }; const r=await h(ev); console.log('status', r.statusCode); console.log(r.body); })()"`
+
+- Debug tips:
+  - Add temporary `console.debug`/`console.error` statements in `lambda/handler.js` and run the dev server in foreground to see logs.
+  - Stop background server: `kill <PID>` or `pkill -f dev_server.js`.
+  - Find listener PID: `lsof -i :3001 -t`.
+
+> Note: The helper dev server sets `LOCAL_DEV=1` locally to disable authentication — do not set this in production environments.
+
 ## How to Test
 - Run unit tests with unittest.
 - Suggested command: python -m unittest test_genealogy_parser.py -v

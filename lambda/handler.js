@@ -294,7 +294,7 @@ exports.handler = async function (event) {
                     const ms = Number(qEnd - qStart) / 1e6;
                     dbQueryTimes.push(ms);
                     dbQueryCount++;
-                    if (sname) stmtTimes[sname] = (stmtTimes[sname] || 0) + ms;
+                    if (sname) stmtTimeSamples[sname].push(ms);
                     err ? reject(err) : resolve(rows);
                 });
             });
@@ -307,7 +307,7 @@ exports.handler = async function (event) {
                     const ms = Number(qEnd - qStart) / 1e6;
                     dbQueryTimes.push(ms);
                     dbQueryCount++;
-                    if (sname) stmtTimes[sname] = (stmtTimes[sname] || 0) + ms;
+                    if (sname) stmtTimeSamples[sname].push(ms);
                     err ? reject(err) : resolve(row);
                 });
             });
@@ -325,11 +325,11 @@ exports.handler = async function (event) {
             // Map prepared stmts -> name and initialize counters and timing
             const stmtToName = new Map();
             const stmtCounts = {};
-            const stmtTimes = {};
+            const stmtTimeSamples = {};
             for (const [k, v] of Object.entries(stmts)) {
                 stmtToName.set(v, k);
                 stmtCounts[k] = 0;
-                stmtTimes[k] = 0;
+                stmtTimeSamples[k] = [];
             };
 
             const parentsCache = new Map(); // memoize getParents for this request
@@ -438,6 +438,11 @@ exports.handler = async function (event) {
                 const requestEnd = process.hrtime.bigint();
                 const responseTimeMs = Number(requestEnd - requestStart) / 1e6;
                 const dbStats = computeDbStats(dbQueryTimes);
+                const preparedStatementMetrics = Object.fromEntries(Object.entries(stmtTimeSamples).map(([k, arr]) => {
+                    const total = Number(arr.reduce((a, b) => a + b, 0).toFixed(3));
+                    const stats = computeDbStats(arr);
+                    return [k, { count: stmtCounts[k] || 0, total_ms: total, min: stats.min, max: stats.max, avg: stats.avg, stddev: stats.stddev }];
+                }));
                 const meta = {
                     response_time_ms: Number(responseTimeMs.toFixed(3)),
                     db_queries: dbQueryCount,
@@ -446,8 +451,7 @@ exports.handler = async function (event) {
                         hits: parentsCacheHits,
                         misses: parentsCacheMisses
                     },
-                    prepared_statement_counts: { ...stmtCounts },
-                    prepared_statement_times_ms: Object.fromEntries(Object.entries(stmtTimes).map(([k, v]) => [k, Number(v.toFixed(3))]))
+                    prepared_statement_metrics: preparedStatementMetrics
                 };
 
                 if (!tree) return { statusCode: 404, headers: jsonHeaders, body: JSON.stringify({ error: 'not found', meta }) };
@@ -458,6 +462,11 @@ exports.handler = async function (event) {
                 const requestEnd = process.hrtime.bigint();
                 const responseTimeMs = Number(requestEnd - requestStart) / 1e6;
                 const dbStats = computeDbStats(dbQueryTimes);
+                const preparedStatementMetrics = Object.fromEntries(Object.entries(stmtTimeSamples).map(([k, arr]) => {
+                    const total = Number(arr.reduce((a, b) => a + b, 0).toFixed(3));
+                    const stats = computeDbStats(arr);
+                    return [k, { count: stmtCounts[k] || 0, total_ms: total, min: stats.min, max: stats.max, avg: stats.avg, stddev: stats.stddev }];
+                }));
                 const meta = {
                     response_time_ms: Number(responseTimeMs.toFixed(3)),
                     db_queries: dbQueryCount,
@@ -466,8 +475,7 @@ exports.handler = async function (event) {
                         hits: parentsCacheHits,
                         misses: parentsCacheMisses
                     },
-                    prepared_statement_counts: { ...stmtCounts },
-                    prepared_statement_times_ms: Object.fromEntries(Object.entries(stmtTimes).map(([k, v]) => [k, Number(v.toFixed(3))]))
+                    prepared_statement_metrics: preparedStatementMetrics
                 };
                 console.error('tree error', err);
                 return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: err && err.message, meta }) };

@@ -300,7 +300,9 @@
             z-index: 1000;
             cursor: pointer;
             transition: all 160ms ease;
-            max-width: 340px;
+            /* Allow the expanded popup to use most of the viewport without overflowing the page */
+            /* max-width: min(95vw, 2200px); */
+            max-width: 95vw;
             overflow: hidden;
             border-radius: 6px;
             box-shadow: var(--chart-shadow);
@@ -324,6 +326,9 @@
             width: auto;
             height: auto;
             white-space: normal;
+            /* Allow the inner table's scrollbar to show and keep the popup from clipping */
+            overflow: auto;
+            max-height: 75vh;
         }
 
         /* Badge - inherit theme via CSS variables (keeps behaviour consistent) */

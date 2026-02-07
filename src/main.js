@@ -120,19 +120,40 @@ script.onload = () => {
             } else {
                 // expanded: show full metrics (no helper text)
                 const db = meta.db_time_ms || {};
-                // Build prepared statement counts display if present
-                let countsHtml = '';
-                if (meta.prepared_statement_counts) {
-                    countsHtml = '<div style="font-size:11px; margin-top:6px;">';
-                    countsHtml += Object.entries(meta.prepared_statement_counts).map(([k, v]) => ` <span style="display:inline-block; margin-right:10px; color:var(--meta-muted,#666)">${k}: <strong>${v}</strong></span>`).join('');
-                    countsHtml += '</div>';
-                }
-                // Build prepared statement timing display if present
-                let timesHtml = '';
-                if (meta.prepared_statement_times_ms) {
-                    timesHtml = '<div style="font-size:11px; margin-top:6px;">';
-                    timesHtml += Object.entries(meta.prepared_statement_times_ms).map(([k, v]) => ` <span style="display:inline-block; margin-right:10px; color:var(--meta-muted,#666)">${k}: <strong>${round(v)}ms</strong></span>`).join('');
-                    timesHtml += '</div>';
+                // Build prepared statement metrics display as a table (one row per statement with all metrics)
+                let stmtHtml = '';
+                if (meta.prepared_statement_metrics) {
+                    // Make the container responsive and allow it to expand up to viewport width
+                    // Add bottom margin/padding so scrollbars don't overlap content
+                    stmtHtml = `
+                        <div style="overflow:auto; margin-top:6px; padding-bottom:12px; margin-bottom:6px; max-width:100%; max-height:60vh;">
+                          <table style="min-width:1200px; font-size:11px; border-collapse:collapse; width:100%">
+                            <thead><tr style="color:var(--meta-muted,#666); text-align:left">
+                              <th style="padding:4px 6px; white-space:nowrap">statement</th>
+                              <th style="padding:4px 6px; white-space:nowrap">count</th>
+                              <th style="padding:4px 6px; white-space:nowrap">total ms</th>
+                              <th style="padding:4px 6px; white-space:nowrap">min</th>
+                              <th style="padding:4px 6px; white-space:nowrap">max</th>
+                              <th style="padding:4px 6px; white-space:nowrap">avg</th>
+                              <th style="padding:4px 6px; white-space:nowrap">std</th>
+                            </tr></thead>
+                            <tbody>
+                              ${Object.entries(meta.prepared_statement_metrics).map(([k, m]) => `
+                                <tr>
+                                  <td style="padding:3px 6px; white-space:nowrap"><strong>${k}</strong></td>
+                                  <td style="padding:3px 6px; white-space:nowrap">${m.count}</td>
+                                  <td style="padding:3px 6px; white-space:nowrap">${round(m.total_ms)}</td>
+                                  <td style="padding:3px 6px; white-space:nowrap">${m.min}</td>
+                                  <td style="padding:3px 6px; white-space:nowrap">${m.max}</td>
+                                  <td style="padding:3px 6px; white-space:nowrap">${m.avg}</td>
+                                  <td style="padding:3px 6px; white-space:nowrap">${m.stddev}</td>
+                                </tr>`).join('')}
+                            </tbody>
+                          </table>
+                        </div>
+                    `;
+                } else {
+                    stmtHtml = '<div style="font-size:11px; margin-top:6px; color:var(--meta-muted,#666)">No statement metrics available</div>';
                 }
                 chartMeta.innerHTML = `
                     <div style="font-weight:600; margin-bottom:6px;">⏱ ${round(meta.response_time_ms)}ms — ${meta.db_queries} DB queries</div>
@@ -140,8 +161,7 @@ script.onload = () => {
                         DB time (ms): min <strong>${db.min}</strong>&nbsp; max <strong>${db.max}</strong>&nbsp; avg <strong>${db.avg}</strong>&nbsp; std <strong>${db.stddev}</strong><br/>
                         Parents cache: hits <strong>${meta.parents_cache.hits}</strong> / misses <strong>${meta.parents_cache.misses}</strong>
                     </div>
-                    ${countsHtml}
-                    ${timesHtml}
+                    ${stmtHtml}
                 `;
                 chartMeta.style.whiteSpace = 'normal';
                 chartMeta.style.padding = '8px 10px';
