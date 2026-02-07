@@ -22,6 +22,7 @@ const DB_PATH = process.env.GENEALOGY_DB || path.join(__dirname, 'dist', 'data',
 const TABLE = process.env.API_KEYS_TABLE; // legacy api-key table
 const ALLOWED_USERS_TABLE = process.env.ALLOWED_USERS_TABLE; // DynamoDB table that contains allowed Google user emails (partition key: "email")
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // Google OAuth Client ID used to validate ID tokens
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET; // (optional) client secret used for server-side code exchange
 const dynamo = new DynamoDBClient({});
 
 // Safety: prevent LOCAL_DEV mode from being enabled in production Lambda environments.
@@ -74,6 +75,21 @@ function getApiKeyFromCookies(headers) {
         const [name, ...rest] = p.split('=');
         if (!name) continue;
         if (name.trim() === COOKIE_NAME) {
+            return rest.join('=').trim();
+        }
+    }
+    return null;
+}
+
+function getIdTokenFromCookies(headers) {
+    if (!headers) return null;
+    const cookieHeader = headers.cookie || headers.Cookie || headers.COOKIE;
+    if (!cookieHeader) return null;
+    const pairs = cookieHeader.split(/;\s*/);
+    for (const p of pairs) {
+        const [name, ...rest] = p.split('=');
+        if (!name) continue;
+        if (name.trim() === 'id_token') {
             return rest.join('=').trim();
         }
     }
@@ -166,6 +182,22 @@ exports.handler = async function (event) {
                 return { statusCode: 401, headers: corsHeaders(), body: 'Invalid or expired token' };
             }
         } else {
+            // Try id_token cookie (server-side session from earlier OAuth redirect)
+            const idTokenFromCookie = getIdTokenFromCookies(headers);
+            if (idTokenFromCookie) {
+                try {
+                    const payload = await verifyGoogleIdToken(idTokenFromCookie);
+                    const email = payload && payload.email && String(payload.email).toLowerCase();
+                    if (!email) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid token: no email' };
+                    const allowed = await checkAllowedUser(email);
+                    if (!allowed) return { statusCode: 403, headers: corsHeaders(), body: 'Unauthorized user' };
+                    // authenticated via cookie-stored id_token; continue
+                } catch (err) {
+                    console.error('Google cookie auth error', err);
+                    // fall through to normal API key checks / redirect
+                }
+            }
+
             // fallback to API key behavior for backwards compatibility
             const headerKey = getApiKeyFromHeaders(headers);
             const cookieKey = getApiKeyFromCookies(headers);
@@ -173,7 +205,13 @@ exports.handler = async function (event) {
 
             const key = headerKey || cookieKey || queryKey;
 
-            if (!key) return { statusCode: 401, headers: corsHeaders(), body: 'Missing API key or Authorization token' };
+            if (!key) {
+                // No API key and no token -> for API requests reject; for HTML pages continue and let the client-side app handle sign-in
+                if (reqPath && reqPath.startsWith('/api/')) {
+                    return { statusCode: 401, headers: corsHeaders(), body: 'Missing API key or Authorization token' };
+                }
+                // For non-API requests (HTML/static), fall through so index.html is served and the browser can run GIS
+            }
 
             const ok = await checkApiKey(key);
             if (!ok) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid API key' };
@@ -190,11 +228,10 @@ exports.handler = async function (event) {
         // Basic JSON helpers
         const jsonHeaders = { 'Content-Type': 'application/json', ...corsHeaders() };
 
-        if (!sqlite3) {
-            return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: 'sqlite3 not installed on this build' }) };
-        }
+            if (reqPath === '/api/config') {
+                return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ google_client_id: GOOGLE_CLIENT_ID || null, has_allowed_users_table: !!ALLOWED_USERS_TABLE }) };
+            }
 
-        const dbOpen = () => new sqlite3.Database(DB_PATH, sqlite3.OPEN_READONLY);
         const dbAll = (db, sql, params) => new Promise((resolve, reject) => db.all(sql, params || [], (err, rows) => err ? reject(err) : resolve(rows)));
         const dbGet = (db, sql, params) => new Promise((resolve, reject) => db.get(sql, params || [], (err, row) => err ? reject(err) : resolve(row)));
 
@@ -561,6 +598,7 @@ exports.handler = async function (event) {
         // unknown API
         return { statusCode: 404, headers: { ...corsHeaders() }, body: 'Not Found' };
     }
+
 
     // Map / to index.html
     let filePath = reqPath === '/' ? '/index.html' : reqPath;

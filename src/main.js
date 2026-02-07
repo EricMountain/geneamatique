@@ -57,6 +57,129 @@ script.onload = () => {
         chart.appendChild(chartSpinner);
     }
 
+    // --- Authentication helpers (Google Identity Services client-side flow)
+    const authConfig = { clientId: null };
+    const idTokenKey = 'id_token';
+
+    function setIdToken(token) {
+        if (!token) {
+            localStorage.removeItem(idTokenKey);
+            return;
+        }
+        localStorage.setItem(idTokenKey, token);
+    }
+    function getIdToken() {
+        return localStorage.getItem(idTokenKey);
+    }
+
+    function decodeJwtPayload(jwt) {
+        try {
+            const b64 = jwt.split('.')[1];
+            const padded = b64.padEnd(b64.length + (4 - (b64.length % 4)) % 4, '=');
+            const json = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+            return JSON.parse(json);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function fetchConfig() {
+        try {
+            const res = await fetch('/api/config');
+            if (!res.ok) return {};
+            return await res.json();
+        } catch (e) { return {}; }
+    }
+
+    async function initAuth() {
+        const cfg = await fetchConfig();
+        if (cfg && cfg.google_client_id) {
+            authConfig.clientId = cfg.google_client_id;
+            // Load GIS script
+            const s = document.createElement('script');
+            s.src = 'https://accounts.google.com/gsi/client';
+            s.defer = true;
+            s.onload = () => {
+                // Initialize button and prompt
+                window.google.accounts.id.initialize({
+                    client_id: authConfig.clientId,
+                    callback: handleCredentialResponse,
+                });
+                window.google.accounts.id.renderButton(
+                    document.getElementById('gsi-button'),
+                    { theme: 'outline', size: 'large', text: 'signin_with' }
+                );
+
+                // Auto prompt if no token present
+                if (!getIdToken()) {
+                    window.google.accounts.id.prompt();
+                } else {
+                    const p = decodeJwtPayload(getIdToken());
+                    if (p && p.email) showSignedIn(p.email);
+                }
+            };
+            document.head.appendChild(s);
+        }
+    }
+
+    function handleCredentialResponse(resp) {
+        if (!resp || !resp.credential) return;
+        setIdToken(resp.credential);
+        const payload = decodeJwtPayload(resp.credential);
+        if (payload && payload.email) showSignedIn(payload.email);
+        // After sign-in, re-run initial hydration to fetch last viewed tree
+        const last = localStorage.getItem('last_db_id');
+        if (last) {
+            try { fetchTreeFor(last); } catch (e) { /* ignore */ }
+        }
+    }
+
+    function showSignedIn(email) {
+        const out = document.getElementById('user-email');
+        const signOut = document.getElementById('sign-out-btn');
+        out.textContent = email;
+        out.style.display = 'inline-block';
+        signOut.style.display = 'inline-block';
+        // hide the GSI button container to avoid double sign-in
+        const g = document.getElementById('gsi-button'); if (g) g.style.display = 'none';
+    }
+
+    function showSignedOut() {
+        const out = document.getElementById('user-email');
+        const signOut = document.getElementById('sign-out-btn');
+        out.textContent = '';
+        out.style.display = 'none';
+        signOut.style.display = 'none';
+        const g = document.getElementById('gsi-button'); if (g) g.style.display = '';
+    }
+
+    document.getElementById('sign-out-btn').addEventListener('click', (e) => {
+        setIdToken(null);
+        showSignedOut();
+        // optional: revoke via google endpoint — left to the client app if needed
+    });
+
+    // Auth-aware fetch wrapper
+    async function authFetch(url, opts) {
+        opts = opts || {};
+        opts.headers = opts.headers || {};
+        const token = getIdToken();
+        if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+        const res = await fetch(url, opts);
+        if (res.status === 401) {
+            // token may be invalid/expired — clear and prompt sign-in
+            setIdToken(null);
+            showSignedOut();
+            if (window.google && window.google.accounts && window.google.accounts.id) {
+                window.google.accounts.id.prompt();
+            }
+        }
+        return res;
+    }
+
+    // Initialize client-side auth
+    initAuth();
+
     // Small metadata display (response times, DB stats) — positioned discreetly at top-right
     // Ensure the chart can position children absolutely
     if (chart.style.position !== 'relative' && chart.style.position !== 'absolute') chart.style.position = 'relative';
@@ -231,7 +354,7 @@ script.onload = () => {
     async function searchIndividuals(q) {
         setSearchLoading(true);
         try {
-            const res = await fetch('/api/individuals?q=' + encodeURIComponent(q));
+            const res = await authFetch('/api/individuals?q=' + encodeURIComponent(q));
             if (!res.ok) throw new Error(await res.text());
             return await res.json();
         } catch (err) {
@@ -246,7 +369,7 @@ script.onload = () => {
         setChartLoading(true);
         try {
             // API now serves only ancestor trees; no type or max_depth query params
-            const res = await fetch(`/api/tree?id=${encodeURIComponent(id)}`);
+            const res = await authFetch(`/api/tree?id=${encodeURIComponent(id)}`);
             if (!res.ok) {
                 const txt = await res.text();
                 window.showTreeError('Server error: ' + txt);

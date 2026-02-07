@@ -110,6 +110,10 @@ resource "aws_lambda_function" "genealogy" {
     variables = {
       API_KEYS_TABLE      = aws_dynamodb_table.api_keys.name
       ALLOWED_USERS_TABLE = aws_dynamodb_table.allowed_users.name
+      # optionally set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your pipeline or by hand
+      # GOOGLE_CLIENT_ID should be set to the client id produced by the GCP module
+      # GOOGLE_CLIENT_SECRET may be set to enable server-side code exchange
+      GOOGLE_CLIENT_SECRET = var.google_client_secret
     }
   }
 }

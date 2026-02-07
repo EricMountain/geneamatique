@@ -21,3 +21,10 @@ variable "log_retention_days" {
   type        = number
   default     = 1
 }
+
+variable "google_client_secret" {
+  description = "(optional) Google OAuth client secret to allow server-side code exchange for ID tokens"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
