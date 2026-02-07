@@ -1,6 +1,29 @@
-// Register service worker for PWA
+// Register service worker for PWA and enable immediate updates (skipWaiting)
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW registration failed', err));
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+        // If there's already a waiting worker, ask it to activate
+        if (reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+        // When a new worker is found, ask it to skip waiting once installed
+        reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed') {
+                    if (navigator.serviceWorker.controller) {
+                        // New update available: ask it to activate immediately
+                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                }
+            });
+        });
+    }).catch(err => console.warn('SW registration failed', err));
+
+    // When the new service worker takes control, reload so we pick up updated assets
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+    });
 }
 
 // Load the public tree viewer script and wire up the search UI to new API endpoints
