@@ -334,6 +334,26 @@ exports.handler = async function (event) {
 
             const parentsCache = new Map(); // memoize getParents for this request
 
+            // Prefetch all individuals for this request into an in-memory cache so that
+            // we perform a single read instead of many repeated `getIndividualById` calls.
+            // Record timing under the synthetic key 'getAllIndividuals' so it appears in metrics.
+            stmtTimeSamples['getAllIndividuals'] = stmtTimeSamples['getAllIndividuals'] || [];
+            const individualsCache = new Map();
+            try {
+                const qStartAll = process.hrtime.bigint();
+                const allRows = await dbAll(db, `SELECT id as id, canonical_name as canonical_name, name_comment as name_comment, date_of_birth, birth_location, birth_comment, date_of_death, death_location, death_comment, marriage_date, marriage_location, marriage_comment FROM individuals`);
+                const qEndAll = process.hrtime.bigint();
+                const msAll = Number(qEndAll - qStartAll) / 1e6;
+                dbQueryTimes.push(msAll);
+                dbQueryCount++;
+                stmtTimeSamples['getAllIndividuals'].push(msAll);
+                // Record this as one invocation so counts reflect the prefetch
+                stmtCounts['getAllIndividuals'] = (stmtCounts['getAllIndividuals'] || 0) + 1;
+                for (const r of allRows) individualsCache.set(r.id, r);
+            } catch (e) {
+                console.error('failed to prefetch individuals', e);
+            }
+
             const getParents = async (individual_id, fam_tree) => {
                 const key = `${individual_id}|${fam_tree || ''}`;
                 if (parentsCache.has(key)) {
@@ -365,8 +385,11 @@ exports.handler = async function (event) {
                 if (visited.has(individual_id) || depth > maxDepth) return null;
                 visited.add(individual_id);
 
-                // Fetch canonical individual data directly (prepared stmt)
-                const row = await stmtGet(stmts.getIndividualById, [individual_id]);
+                // Fetch canonical individual data from per-request cache (prefetched), falling back to prepared stmt
+                let row = individualsCache.get(individual_id);
+                if (!row) {
+                    row = await stmtGet(stmts.getIndividualById, [individual_id]);
+                }
                 if (!row) return null;
 
                 const node = recordToNode(row, fam_tree);
