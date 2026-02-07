@@ -315,11 +315,9 @@ exports.handler = async function (event) {
             const baseSelect = `SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type as relationship_type, r.family_tree as family_tree FROM relationships r JOIN individuals i ON r.parent_id = i.id`;
 
             const stmts = {
-                getParentsWithTree: db.prepare(`${baseSelect} WHERE r.child_id = ? AND r.family_tree = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`),
                 getParents: db.prepare(`${baseSelect} WHERE r.child_id = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`),
                 getIndividualById: db.prepare(`SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment FROM individuals i WHERE i.id = ?`),
-                findOthersByNameDob: db.prepare(`SELECT DISTINCT i.id as id FROM individuals i WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?`),
-                findTreesForIndividual: db.prepare(`SELECT DISTINCT family_tree as family_tree FROM relationships WHERE parent_id = ? OR child_id = ?`)
+                findOthersByNameDob: db.prepare(`SELECT DISTINCT i.id as id FROM individuals i WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?`)
             };
 
             // Map prepared stmts -> name and initialize counters and timing
@@ -357,6 +355,7 @@ exports.handler = async function (event) {
             // Prefetch all parent relationships joined to parent individual data
             // Map: child_id -> [ { id, canonical_name, ..., relationship_type, family_tree } ]
             stmtTimeSamples['getAllRelationships'] = stmtTimeSamples['getAllRelationships'] || [];
+            let relationshipsPrefetched = false;
             const parentsByChild = new Map();
             try {
                 const qStartRel = process.hrtime.bigint();
@@ -373,53 +372,44 @@ exports.handler = async function (event) {
                     arr.push(r);
                     parentsByChild.set(r.child_id, arr);
                 }
+                relationshipsPrefetched = true;
             } catch (e) {
                 console.error('failed to prefetch relationships', e);
             }
 
-            const getParents = async (individual_id, fam_tree) => {
-                const key = `${individual_id}|${fam_tree || ''}`;
-                if (parentsCache.has(key)) {
+            const getParents = async (individual_id) => {
+                if (parentsCache.has(individual_id)) {
                     parentsCacheHits++;
-                    return parentsCache.get(key);
+                    return parentsCache.get(individual_id);
                 }
 
-                // Cache miss
                 parentsCacheMisses++;
 
-                // Prefer cached relationships if prefetch succeeded
-                const byChild = parentsByChild.get(individual_id) || null;
+                // Use prefetched relationships, deduplicating by parent id + relationship type
+                // (same parent may appear in multiple family_tree sources)
+                const byChild = parentsByChild.get(individual_id);
                 if (byChild) {
-                    if (fam_tree) {
-                        const rows = byChild.filter(r => (r.family_tree || '') === (fam_tree || ''));
-                        if (rows && rows.length) {
-                            parentsCache.set(key, rows);
-                            return rows;
-                        }
-                        // fallback to all parents for child
-                        parentsCache.set(key, byChild);
-                        return byChild;
-                    } else {
-                        parentsCache.set(key, byChild);
-                        return byChild;
-                    }
+                    const seen = new Set();
+                    const deduped = byChild.filter(r => {
+                        const k = `${r.id}|${r.relationship_type}`;
+                        if (seen.has(k)) return false;
+                        seen.add(k);
+                        return true;
+                    });
+                    parentsCache.set(individual_id, deduped);
+                    return deduped;
                 }
 
-                // If prefetch failed, fall back to prepared statements
-                if (fam_tree) {
-                    let rows = await stmtAll(stmts.getParentsWithTree, [individual_id, fam_tree]);
-                    if (rows && rows.length) {
-                        parentsCache.set(key, rows);
-                        return rows;
-                    }
-                    rows = await stmtAll(stmts.getParents, [individual_id]);
-                    parentsCache.set(key, rows || []);
-                    return rows;
-                } else {
-                    const rows = await stmtAll(stmts.getParents, [individual_id]);
-                    parentsCache.set(key, rows || []);
-                    return rows;
+                // Prefetch succeeded but no relationships → genuinely no parents
+                if (relationshipsPrefetched) {
+                    parentsCache.set(individual_id, []);
+                    return [];
                 }
+
+                // Prefetch failed — fall back to prepared statement
+                const rows = await stmtAll(stmts.getParents, [individual_id]);
+                parentsCache.set(individual_id, rows || []);
+                return rows || [];
             };
 
             // recursive builders
@@ -437,19 +427,19 @@ exports.handler = async function (event) {
                 const node = recordToNode(row, fam_tree);
                 node.sosa = sosa;
 
-                // get parents
-                let parents = await getParents(individual_id, fam_tree);
+                // get parents (no family_tree filtering — we trace ancestry
+                // through all relationships regardless of import source)
+                let parents = await getParents(individual_id);
                 if (!parents || !parents.length) {
+                    // Cross-tree matching: look for a duplicate individual (same
+                    // name + DOB, different id) that does have parents recorded
                     if (node.date_of_birth && node.name) {
                         const others = await stmtAll(stmts.findOthersByNameDob, [node.name, node.date_of_birth, individual_id]);
                         for (const o of others) {
-                            const trees = await stmtAll(stmts.findTreesForIndividual, [o.id, o.id]);
-                            for (const t of trees) {
-                                parents = await getParents(o.id, t.family_tree);
-                                if (parents && parents.length) {
-                                    const otherNode = await buildAncestor(o.id, t.family_tree, maxDepth, visited, depth, sosa);
-                                    return otherNode;
-                                }
+                            const otherParents = await getParents(o.id);
+                            if (otherParents && otherParents.length) {
+                                const otherNode = await buildAncestor(o.id, null, maxDepth, visited, depth, sosa);
+                                return otherNode;
                             }
                         }
                     }
