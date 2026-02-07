@@ -76,14 +76,16 @@ class TestDatabaseConsistency(unittest.TestCase):
         self.cursor.execute(
             "SELECT COUNT(*) FROM individuals WHERE canonical_name IS NULL OR canonical_name = ''")
         count = self.cursor.fetchone()[0]
-        self.assertEqual(count, 0, f"Found {count} individuals without canonical_name")
+        self.assertEqual(
+            count, 0, f"Found {count} individuals without canonical_name")
 
     def test_all_individuals_have_old_id(self):
         """Test that all individuals have at least one old_id instance (in individual_tree_instances)."""
         self.cursor.execute(
             "SELECT COUNT(*) FROM individual_tree_instances WHERE old_id IS NULL")
         count = self.cursor.fetchone()[0]
-        self.assertEqual(count, 0, f"Found {count} individual_tree_instances without old_id")
+        self.assertEqual(
+            count, 0, f"Found {count} individual_tree_instances without old_id")
 
     def test_all_individuals_have_family_tree(self):
         """Test that all individual instances have a family_tree identifier (individual_tree_instances)."""
