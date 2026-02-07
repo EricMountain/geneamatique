@@ -338,7 +338,22 @@ exports.handler = async function (event) {
             const individualsCache = new Map();
             try {
                 const qStartAll = process.hrtime.bigint();
-                const allRows = await dbAll(db, `SELECT id as id, canonical_name as canonical_name, name_comment as name_comment, date_of_birth, birth_location, birth_comment, date_of_death, death_location, death_comment, marriage_date, marriage_location, marriage_comment FROM individuals`);
+                const allRows = await dbAll(db, `
+                    SELECT
+                        id,
+                        canonical_name,
+                        name_comment,
+                        date_of_birth,
+                        birth_location,
+                        birth_comment,
+                        date_of_death,
+                        death_location,
+                        death_comment,
+                        marriage_date,
+                        marriage_location,
+                        marriage_comment
+                    FROM individuals
+                `);
                 const qEndAll = process.hrtime.bigint();
                 const msAll = Number(qEndAll - qStartAll) / 1e6;
                 dbQueryTimes.push(msAll);
@@ -358,7 +373,26 @@ exports.handler = async function (event) {
             const parentsByChild = new Map();
             try {
                 const qStartRel = process.hrtime.bigint();
-                const relRows = await dbAll(db, `SELECT r.child_id as child_id, r.family_tree as family_tree, r.relationship_type as relationship_type, i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth as date_of_birth, i.birth_location as birth_location, i.birth_comment as birth_comment, i.date_of_death as date_of_death, i.death_location as death_location, i.death_comment as death_comment, i.marriage_date as marriage_date, i.marriage_location as marriage_location, i.marriage_comment as marriage_comment FROM relationships r JOIN individuals i ON r.parent_id = i.id`);
+                const relRows = await dbAll(db, `
+                    SELECT
+                        r.child_id,
+                        r.family_tree,
+                        r.relationship_type,
+                        i.id,
+                        i.canonical_name,
+                        i.name_comment,
+                        i.date_of_birth,
+                        i.birth_location,
+                        i.birth_comment,
+                        i.date_of_death,
+                        i.death_location,
+                        i.death_comment,
+                        i.marriage_date,
+                        i.marriage_location,
+                        i.marriage_comment
+                    FROM relationships r
+                    JOIN individuals i ON r.parent_id = i.id
+                `);
                 const qEndRel = process.hrtime.bigint();
                 const msRel = Number(qEndRel - qStartRel) / 1e6;
                 dbQueryTimes.push(msRel);
