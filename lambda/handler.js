@@ -358,12 +358,8 @@ exports.handler = async function (event) {
             // Map: child_id -> [ { id, canonical_name, ..., relationship_type, family_tree } ]
             stmtTimeSamples['getAllRelationships'] = stmtTimeSamples['getAllRelationships'] || [];
             const parentsByChild = new Map();
-            // Flag which indicates whether the prefetch completed (even if it returned 0 rows).
-            // If true, we can trust parentsByChild to represent the full set and avoid DB fallbacks.
-            let relationshipsPrefetched = false;
             try {
                 const qStartRel = process.hrtime.bigint();
-                // const relRows = await dbAll(db, `SELECT r.child_id as child_id, r.family_tree as family_tree, r.relationship_type as relationship_type, i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth as date_of_birth, i.birth_location as birth_location, i.birth_comment as birth_comment, i.date_of_death as date_of_death, i.death_location as death_location, i.death_comment as death_comment, i.marriage_date as marriage_date, i.marriage_location as marriage_location, i.marriage_comment as marriage_comment FROM relationships r JOIN individuals i ON r.parent_id = i.id`);
                 const relRows = await dbAll(db, `SELECT r.child_id as child_id, r.family_tree as family_tree, r.relationship_type as relationship_type, i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth as date_of_birth, i.birth_location as birth_location, i.birth_comment as birth_comment, i.date_of_death as date_of_death, i.death_location as death_location, i.death_comment as death_comment, i.marriage_date as marriage_date, i.marriage_location as marriage_location, i.marriage_comment as marriage_comment FROM relationships r JOIN individuals i ON r.parent_id = i.id`);
                 const qEndRel = process.hrtime.bigint();
                 const msRel = Number(qEndRel - qStartRel) / 1e6;
@@ -377,8 +373,6 @@ exports.handler = async function (event) {
                     arr.push(r);
                     parentsByChild.set(r.child_id, arr);
                 }
-                // Mark successful prefetch (even if relRows.length === 0)
-                relationshipsPrefetched = true;
             } catch (e) {
                 console.error('failed to prefetch relationships', e);
             }
@@ -393,26 +387,25 @@ exports.handler = async function (event) {
                 // Cache miss
                 parentsCacheMisses++;
 
-                // If we prefetched relationships, use that definitive result (empty => no parents)
-                if (relationshipsPrefetched) {
-                    const byChild = parentsByChild.get(individual_id) || [];
+                // Prefer cached relationships if prefetch succeeded
+                const byChild = parentsByChild.get(individual_id) || null;
+                if (byChild) {
                     if (fam_tree) {
                         const rows = byChild.filter(r => (r.family_tree || '') === (fam_tree || ''));
-                        // If we found parents in the requested family_tree, return them.
-                        // Otherwise fall back to parents from any tree (to allow crossing trees),
-                        // matching the fallback behavior when prefetch did not run.
                         if (rows && rows.length) {
                             parentsCache.set(key, rows);
                             return rows;
                         }
+                        // fallback to all parents for child
+                        parentsCache.set(key, byChild);
+                        return byChild;
+                    } else {
                         parentsCache.set(key, byChild);
                         return byChild;
                     }
-                    parentsCache.set(key, byChild);
-                    return byChild;
                 }
 
-                // Prefetch did not complete; fall back to prepared statements
+                // If prefetch failed, fall back to prepared statements
                 if (fam_tree) {
                     let rows = await stmtAll(stmts.getParentsWithTree, [individual_id, fam_tree]);
                     if (rows && rows.length) {
