@@ -114,6 +114,7 @@ resource "aws_lambda_function" "genealogy" {
       # GOOGLE_CLIENT_ID should be set to the client id produced by the GCP module
       # GOOGLE_CLIENT_SECRET may be set to enable server-side code exchange
       GOOGLE_CLIENT_SECRET = var.google_client_secret
+      GOOGLE_CLIENT_ID     = var.google_client_id
     }
   }
 }

@@ -8,12 +8,13 @@ Environment variables:
 
 **If `ALLOWED_USERS_TABLE` and `GOOGLE_CLIENT_ID` are set**, the Lambda will accept `Authorization: Bearer <Google ID token>` headers. It verifies the ID token audience using `GOOGLE_CLIENT_ID` and then checks that the authenticated user's email exists in `ALLOWED_USERS_TABLE` (partition key `email` as a string). If Google auth fails, the Lambda falls back to the `API_KEYS_TABLE` check for backward compatibility.
 
-Automatic login behavior:
-- If a user visits the site without an API key nor an active id_token cookie, the Lambda will redirect the browser to Google's OAuth consent page to start the authorization-code flow (server-side). After the user signs in, Google will redirect back to `https://<function_url>/oauth2callback` which the Lambda handles by exchanging the code for an ID token, verifying it, checking the email in `ALLOWED_USERS_TABLE`, and then setting a secure `id_token` cookie for subsequent requests.
+Client-side login behavior (preferred):
+- The frontend can use Google Identity Services (GIS) to obtain an ID token in the browser and include it with requests as `Authorization: Bearer <id_token>`. The Lambda accepts these tokens and validates them using `GOOGLE_CLIENT_ID`, then checks the user's email exists in `ALLOWED_USERS_TABLE`.
+- The Lambda exposes `GET /api/config` which returns `{ google_client_id: <client_id> }` for the frontend to discover the client id at runtime and initialize GIS. This avoids baking client IDs into the static build.
 
 Notes:
-- For the server-side flow to work you must also provide `GOOGLE_CLIENT_SECRET` (set via Terraform or manually in the Lambda console) and configure the OAuth client in GCP to include `https://<function_url>/oauth2callback` as an authorized redirect URI.
-- If you prefer a client-side-only flow (no server-side `GOOGLE_CLIENT_SECRET`), you can implement client-side sign-in and send the ID token to the Lambda as `Authorization: Bearer <id_token>` instead.
+- This client-side flow does *not* require `GOOGLE_CLIENT_SECRET`. If you prefer a server-side flow (authorization-code + server exchange), it is supported but not recommended for simple setups; it requires `GOOGLE_CLIENT_SECRET` and adding `https://<function_url>/oauth2callback` as an authorized redirect URI in the GCP OAuth client.
+- If the user is not authenticated and a request is made to an API endpoint (`/api/*`) the Lambda will return `401` so the frontend can prompt sign-in and retry. Static HTML pages are served without redirect so the client app can initiate GIS sign-in.
 Build / deploy steps:
 1. From repo root run `./build_pwa.sh` to build the Vite app into `lambda/dist` and install lambda deps.
 2. Include your SQLite database in the Lambda package under `dist/data/genealogy.db` (this file is used at runtime to serve API requests). Do NOT commit private data to the repo — keep real DBs out of source control and inject the file at packaging time.

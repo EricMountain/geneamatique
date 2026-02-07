@@ -28,3 +28,9 @@ variable "google_client_secret" {
   default     = ""
   sensitive   = true
 }
+
+variable "google_client_id" {
+  description = "(optional) Google OAuth client id (used by the client-side GIS flow)"
+  type        = string
+  default     = ""
+}

@@ -14,7 +14,9 @@ terraform apply -var="project_id=your-project" -var="support_email=you@example.c
 
 3. After apply, note the `client_id` output and copy it into your AWS Terraform or Lambda env var `GOOGLE_CLIENT_ID`.
 
-4. IMPORTANT: If you plan to use the server-side authorization-code flow (the Lambda will redirect users to Google and do a server-side exchange), add `https://<lambda_function_url>/oauth2callback` as an authorized redirect URI in the OAuth client (this setting is configured in the GCP Console). If you used `google_iap_client` it may not expose redirect URIs via API — in that case add the redirect URI manually in the Cloud Console for the created client.
+4. IMPORTANT: For the client-side flow (recommended), you only need the `client_id` and the frontend will initiate sign-in using Google Identity Services (GIS). The Lambda exposes `/api/config` so your frontend can discover `google_client_id` at runtime.
+
+5. (Optional) If you plan to use the server-side authorization-code flow, add `https://<lambda_function_url>/oauth2callback` as an authorized redirect URI in the OAuth client (this setting is configured in the GCP Console). Note: `google_iap_client` may not expose redirect URIs via API — you may need to add the redirect URI manually in the Cloud Console for the created client.
 
 Caveats & Notes
 - The IAP OAuth admin APIs are being deprecated and creation of brands/clients may be restricted or require console/manual steps in some organizations. If `google_iap_brand` or `google_iap_client` fails, create the OAuth client manually in the GCP Console and paste the Client ID into your AWS Lambda configuration.
