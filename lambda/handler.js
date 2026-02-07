@@ -317,7 +317,6 @@ exports.handler = async function (event) {
             const stmts = {
                 getParents: db.prepare(`${baseSelect} WHERE r.child_id = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`),
                 getIndividualById: db.prepare(`SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment FROM individuals i WHERE i.id = ?`),
-                findOthersByNameDob: db.prepare(`SELECT DISTINCT i.id as id FROM individuals i WHERE i.canonical_name = ? AND i.date_of_birth = ? AND i.id != ?`)
             };
 
             // Map prepared stmts -> name and initialize counters and timing
@@ -430,20 +429,6 @@ exports.handler = async function (event) {
                 // get parents (no family_tree filtering — we trace ancestry
                 // through all relationships regardless of import source)
                 let parents = await getParents(individual_id);
-                if (!parents || !parents.length) {
-                    // Cross-tree matching: look for a duplicate individual (same
-                    // name + DOB, different id) that does have parents recorded
-                    if (node.date_of_birth && node.name) {
-                        const others = await stmtAll(stmts.findOthersByNameDob, [node.name, node.date_of_birth, individual_id]);
-                        for (const o of others) {
-                            const otherParents = await getParents(o.id);
-                            if (otherParents && otherParents.length) {
-                                const otherNode = await buildAncestor(o.id, null, maxDepth, visited, depth, sosa);
-                                return otherNode;
-                            }
-                        }
-                    }
-                }
 
                 if (parents && parents.length) {
                     let mother = null, father = null;
