@@ -71,7 +71,7 @@ if [ -n "$EXISTING_BACK_LIST" ]; then
                 cmd=$(cat "/proc/$pid/comm" 2>/dev/null || echo "(unknown)")
             fi
         fi
-        if echo "$cmd" | egrep -i -q "$ALLOWED"; then
+        if echo "$cmd" | grep -E -i -q "$ALLOWED"; then
             BACK_PIDS_TO_KILL="$BACK_PIDS_TO_KILL $pid"
         else
             echo "  Skipping PID $pid (command: $cmd) — not in allowed list"
@@ -103,7 +103,7 @@ if [ -n "$EXISTING_FRONT_LIST" ]; then
                 cmd=$(cat "/proc/$pid/comm" 2>/dev/null || echo "(unknown)")
             fi
         fi
-        if echo "$cmd" | egrep -i -q "$ALLOWED"; then
+        if echo "$cmd" | grep -E -i -q "$ALLOWED"; then
             FRONT_PIDS_TO_KILL="$FRONT_PIDS_TO_KILL $pid"
         else
             echo "  Skipping PID $pid (command: $cmd) — not in allowed list"

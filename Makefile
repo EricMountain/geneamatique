@@ -34,6 +34,8 @@ deploy: build_pwa terraform-apply
 # Run frontend + backend locally for development (backend auth disabled in local mode)
 dev_local: build_pwa
 	@echo "Starting local backend (lambda) and frontend (src)..."
+	# For local dev, include devDependencies in the lambda install so tools like nodemon are available
+	@INSTALL_DEV_DEPS=1 ./build_pwa.sh
 	@./scripts/dev_local.sh
 
 # Convenience bootstrap

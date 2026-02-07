@@ -3,9 +3,12 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "dev": "node dev_server.js",
+        "dev": "nodemon --watch .. --watch . --ext js,json --delay 200 --exec node dev_server.js",
         "audit:fix": "npm audit fix",
         "audit:fix:force": "npm audit fix --force"
+    },
+    "devDependencies": {
+        "nodemon": "^2.0.22"
     },
     "main": "handler.js",
     "dependencies": {

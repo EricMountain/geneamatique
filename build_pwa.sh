@@ -9,7 +9,12 @@ popd >/dev/null
 
 echo "Installing lambda dependencies..."
 pushd lambda >/dev/null
-npm install --omit=dev
+# When INSTALL_DEV_DEPS=1 is set we include devDependencies (useful for local development with nodemon).
+if [ "${INSTALL_DEV_DEPS:-0}" = "1" ]; then
+    npm install
+else
+    npm install --omit=dev
+fi
 popd >/dev/null
 
 # Copy SQLite DB into the lambda package if present (do NOT commit real DBs to repo)
