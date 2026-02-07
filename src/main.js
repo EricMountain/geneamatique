@@ -93,6 +93,20 @@ script.onload = () => {
 
     async function initAuth() {
         const cfg = await fetchConfig();
+
+        // First, probe whether an API key is already present (cookies or header). If so, hide GSI button.
+        try {
+            const res = await fetch('/api/key_status', { credentials: 'include' });
+            if (res.ok) {
+                // API key present and valid — hide sign-in UI
+                showSignedOut();
+                const g = document.getElementById('gsi-button'); if (g) g.style.display = 'none';
+                return;
+            }
+        } catch (e) {
+            // ignore — proceed to GIS init
+        }
+
         if (cfg && cfg.google_client_id) {
             authConfig.clientId = cfg.google_client_id;
             // Load GIS script
@@ -163,6 +177,8 @@ script.onload = () => {
     async function authFetch(url, opts) {
         opts = opts || {};
         opts.headers = opts.headers || {};
+        // ensure cookies (api_key cookie) are sent to the API
+        opts.credentials = opts.credentials || 'include';
         const token = getIdToken();
         if (token) opts.headers['Authorization'] = 'Bearer ' + token;
         const res = await fetch(url, opts);

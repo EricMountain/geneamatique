@@ -10,8 +10,7 @@ Environment variables:
 
 Client-side login behavior (preferred):
 - The frontend can use Google Identity Services (GIS) to obtain an ID token in the browser and include it with requests as `Authorization: Bearer <id_token>`. The Lambda accepts these tokens and validates them using `GOOGLE_CLIENT_ID`, then checks the user's email exists in `ALLOWED_USERS_TABLE`.
-- The Lambda exposes `GET /api/config` which returns `{ google_client_id: <client_id> }` for the frontend to discover the client id at runtime and initialize GIS. This avoids baking client IDs into the static build.
-
+- The Lambda exposes `GET /api/config` which returns `{ google_client_id: <client_id> }` for the frontend to discover the client id at runtime and initialize GIS. This avoids baking client IDs into the static build.- The Lambda also exposes `GET /api/key_status` which allows the frontend to detect whether a valid API key is present (via cookie/header). When a valid API key is present the frontend will hide the GIS sign-in button since the API key already grants access.
 Notes:
 - This client-side flow does *not* require `GOOGLE_CLIENT_SECRET`. If you prefer a server-side flow (authorization-code + server exchange), it is supported but not recommended for simple setups; it requires `GOOGLE_CLIENT_SECRET` and adding `https://<function_url>/oauth2callback` as an authorized redirect URI in the GCP OAuth client.
 - If the user is not authenticated and a request is made to an API endpoint (`/api/*`) the Lambda will return `401` so the frontend can prompt sign-in and retry. Static HTML pages are served without redirect so the client app can initiate GIS sign-in.

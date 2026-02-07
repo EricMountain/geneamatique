@@ -206,15 +206,23 @@ exports.handler = async function (event) {
             const key = headerKey || cookieKey || queryKey;
 
             if (!key) {
-                // No API key and no token -> for API requests reject; for HTML pages continue and let the client-side app handle sign-in
-                if (reqPath && reqPath.startsWith('/api/')) {
+                // No API key and no token -> for most API requests reject; for HTML pages continue and let the client-side app handle sign-in
+                // Special-case: allow unauthenticated requests through to `/api/key_status` so the client can probe whether an API key cookie/header is present
+                // Allow unauthenticated probes to /api/key_status and public config to /api/config
+                if (reqPath && reqPath.startsWith('/api/') && reqPath !== '/api/key_status' && reqPath !== '/api/config') {
                     return { statusCode: 401, headers: corsHeaders(), body: 'Missing API key or Authorization token' };
                 }
                 // For non-API requests (HTML/static), fall through so index.html is served and the browser can run GIS
-            }
+                // For `/api/key_status`, we fall through to the endpoint which will perform its own key check
+            } else {
+                const ok = await checkApiKey(key);
+                if (!ok) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid API key' };
 
-            const ok = await checkApiKey(key);
-            if (!ok) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid API key' };
+                // If the client provided the key via query param and there is no cookie, set a cookie so future requests are authenticated
+                if (queryKey && !cookieKey) {
+                    setCookieHeader = makeSetCookieHeader(key);
+                }
+            }
 
             // If the client provided the key via query param and there is no cookie, set a cookie so future requests are authenticated
             if (queryKey && !cookieKey) {
@@ -232,6 +240,20 @@ exports.handler = async function (event) {
                 return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ google_client_id: GOOGLE_CLIENT_ID || null, has_allowed_users_table: !!ALLOWED_USERS_TABLE }) };
             }
 
+            // probe whether a valid API key was presented (used by the client to hide the sign-in button)
+            if (reqPath === '/api/key_status') {
+                const headerKey = getApiKeyFromHeaders(headers);
+                const cookieKey = getApiKeyFromCookies(headers);
+                const queryKey = getApiKeyFromQuery(event);
+                const key = headerKey || cookieKey || queryKey;
+                if (!key) return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
+                const ok = await checkApiKey(key);
+                if (!ok) return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
+                return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ ok: true }) };
+            }
+
+        // helper to open DB (was accidentally removed; required by local dev handler)
+        const dbOpen = () => new sqlite3.Database(DB_PATH, sqlite3.OPEN_READONLY);
         const dbAll = (db, sql, params) => new Promise((resolve, reject) => db.all(sql, params || [], (err, rows) => err ? reject(err) : resolve(rows)));
         const dbGet = (db, sql, params) => new Promise((resolve, reject) => db.get(sql, params || [], (err, row) => err ? reject(err) : resolve(row)));
 

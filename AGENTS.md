@@ -90,3 +90,7 @@ When developing, you can run the backend locally and either call it over HTTP or
 - After build/run, use `terraform apply` from `terraform/aws` to create the table and lambda. Ensure `build_pwa.sh` has been run first so the lambda package contains the site.
 
 - (Optional) Google OAuth: The lambda can be configured to accept `Authorization: Bearer <Google ID token>` instead of an API key. To enable this set the env vars `GOOGLE_CLIENT_ID` (OAuth client ID used to validate tokens) and `ALLOWED_USERS_TABLE` (DynamoDB table that contains allowed users with partition key `email` as a string). The lambda will verify the ID token audience and check that the user's email exists in `ALLOWED_USERS_TABLE`. If both checks succeed the request is authenticated; otherwise it falls back to the existing API key check for backward compatibility.
+
+## Git
+
+* Do not commit changes, let the user handle this.
