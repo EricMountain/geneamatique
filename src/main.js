@@ -103,11 +103,47 @@ script.onload = () => {
     let pendingPrompt = false;
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) {
-        // always attach click handler so clicks work even before GIS script loads
+        // attach click handler that tries GIS prompt first and falls back to redirect
         loginBtn.addEventListener('click', () => {
+            const redirectTo = encodeURIComponent(window.location.pathname + window.location.search || '/');
+            const redirectUri = `${window.location.origin}/oauth2callback`;
+            const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(authConfig.clientId || '')}&response_type=code&scope=openid%20email%20profile&redirect_uri=${encodeURIComponent(redirectUri)}&state=${redirectTo}&prompt=select_account`;
+
             pendingPrompt = true;
+            let handled = false;
+            // If GIS available, ask it to show prompt and use notification to decide whether to fallback
             if (window.google && window.google.accounts && window.google.accounts.id) {
-                window.google.accounts.id.prompt();
+                try {
+                    window.google.accounts.id.prompt((notif) => {
+                        try {
+                            if (notif && notif.isDisplayed && notif.isDisplayed()) {
+                                handled = true; // prompt displayed, we won't redirect
+                            } else if (notif && notif.isNotDisplayed && notif.isNotDisplayed()) {
+                                // not displayed -> fallback to redirect
+                                handled = true;
+                                window.location.href = oauthUrl;
+                            } else if (notif && notif.isSkippedMoment && notif.isSkippedMoment()) {
+                                handled = true;
+                                window.location.href = oauthUrl;
+                            }
+                        } catch (e) {
+                            // ignore and fallback
+                        }
+                    });
+                } catch (e) {
+                    // prompt failed synchronously – fallback
+                    handled = true;
+                    window.location.href = oauthUrl;
+                }
+                // After a short timeout, if nothing happened, redirect as fallback
+                setTimeout(() => {
+                    if (!handled) {
+                        window.location.href = oauthUrl;
+                    }
+                }, 1200);
+            } else {
+                // GIS not loaded yet – do direct redirect
+                window.location.href = oauthUrl;
             }
         });
     }
@@ -178,16 +214,11 @@ script.onload = () => {
                     window.google.accounts.id.prompt((notif) => {
                         try {
                             console.debug('[GSI prompt notification]', notif);
-                            if (notif && typeof notif.isNotDisplayed === 'function' && notif.isNotDisplayed()) {
-                                const reason = notif.getNotDisplayedReason ? notif.getNotDisplayedReason() : 'unknown';
-                                console.warn('GSI not displayed:', reason);
-                                showGsiStatus('Sign-in popup was not shown: ' + reason);
-                            } else if (notif && typeof notif.isSkippedMoment === 'function' && notif.isSkippedMoment()) {
-                                const reason = notif.getSkippedReason ? notif.getSkippedReason() : 'skipped';
-                                console.warn('GSI skipped moment:', reason);
-                                showGsiStatus('Sign-in popup skipped: ' + reason);
-                            } else {
-                                showGsiStatus('');
+                            // No diagnostic UI shown to the user — keep behavior silent and fall back to redirect when needed
+                            if (notif && notif.isNotDisplayed && notif.isNotDisplayed()) {
+                                console.warn('GSI not displayed:', notif.getNotDisplayedReason ? notif.getNotDisplayedReason() : 'unknown');
+                            } else if (notif && notif.isSkippedMoment && notif.isSkippedMoment()) {
+                                console.warn('GSI skipped moment:', notif.getSkippedReason ? notif.getSkippedReason() : 'skipped');
                             }
                         } catch (e) { /* ignore */ }
                     });
@@ -249,17 +280,6 @@ script.onload = () => {
     }
 
     // Show a short status message under the login button (for diagnostic / user hints)
-    function showGsiStatus(msg) {
-        const el = document.getElementById('gsi-status');
-        if (!el) return;
-        if (!msg) {
-            el.style.display = 'none';
-            el.textContent = '';
-            return;
-        }
-        el.style.display = 'block';
-        el.textContent = msg;
-    }
 
     // Auth-aware fetch wrapper
     async function authFetch(url, opts) {
@@ -274,7 +294,7 @@ script.onload = () => {
             // token may be invalid/expired — clear and prompt sign-in
             setIdToken(null);
             showSignedOut();
-            showGsiStatus('Session expired, please sign in');
+
             if (window.google && window.google.accounts && window.google.accounts.id) {
                 window.google.accounts.id.prompt((notif) => {
                     console.debug('[GSI re-prompt]', notif);
