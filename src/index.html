@@ -343,6 +343,18 @@
             filter: brightness(0.95);
         }
 
+        /* User email clickable styling */
+        #user-email {
+            cursor: pointer;
+            padding: 6px 10px;
+            border-radius: 6px;
+            transition: background 160ms ease, color 160ms ease;
+        }
+        #user-email:hover {
+            background: rgba(0,0,0,0.04);
+            color: var(--text);
+        }
+
         #chart .chart-meta.collapsed {
             display: flex;
             align-items: center;
@@ -388,8 +400,7 @@
         </button>
         <div id="auth-controls" style="display:flex;align-items:center;gap:8px;margin-left:8px">
             <button id="login-btn" style="display:none;padding:8px 12px;border:1px solid var(--border);background:var(--page-bg);color:var(--text);border-radius:6px;cursor:pointer;">Login with Google</button>
-            <button id="sign-out-btn" style="display:none;padding:8px 10px;border:1px solid var(--border);background:transparent;">Sign out</button>
-            <span id="user-email" style="display:none;color:var(--muted);font-size:13px"></span>
+            <span id="user-email" style="display:none;color:var(--muted);font-size:13px;cursor:pointer;" title="Click to sign out of this app"></span>
         </div>
     </div>
 

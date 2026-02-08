@@ -190,10 +190,8 @@ script.onload = () => {
 
     function showSignedIn(email) {
         const out = document.getElementById('user-email');
-        const signOut = document.getElementById('sign-out-btn');
         out.textContent = email;
         out.style.display = 'inline-block';
-        signOut.style.display = 'inline-block';
         // hide the login button to avoid double sign-in
         const loginBtn = document.getElementById('login-btn'); if (loginBtn) loginBtn.style.display = 'none';
     }
@@ -207,11 +205,20 @@ script.onload = () => {
         const loginBtn = document.getElementById('login-btn'); if (loginBtn) loginBtn.style.display = '';
     }
 
-    document.getElementById('sign-out-btn').addEventListener('click', (e) => {
-        setIdToken(null);
-        showSignedOut();
-        // optional: revoke via google endpoint — left to the client app if needed
-    });
+    // Make the user email label act as the sign-out control (app-only sign-out)
+    const userEmailEl = document.getElementById('user-email');
+    if (userEmailEl) {
+        userEmailEl.addEventListener('click', (e) => {
+            const email = userEmailEl.textContent || '';
+            if (!email) return;
+            const ok = confirm(`Sign out of this app as ${email}?`);
+            if (!ok) return;
+            // App-only sign-out: clear local token and return to login-only UI
+            setIdToken(null);
+            try { localStorage.removeItem('last_db_id'); } catch (err) { /* ignore */ }
+            showLoginOnly();
+        });
+    }
 
     // Auth-aware fetch wrapper
     async function authFetch(url, opts) {
