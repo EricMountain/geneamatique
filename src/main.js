@@ -100,11 +100,23 @@ script.onload = () => {
         return now < p.exp;
     }
 
+    let pendingPrompt = false;
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) {
+        // always attach click handler so clicks work even before GIS script loads
+        loginBtn.addEventListener('click', () => {
+            pendingPrompt = true;
+            if (window.google && window.google.accounts && window.google.accounts.id) {
+                window.google.accounts.id.prompt();
+            }
+        });
+    }
+
     function showLoginOnly() {
         document.body.classList.add('auth-required');
-        // ensure sign-in UI visible, hide user email and sign-out
-        const loginBtn = document.getElementById('login-btn'); if (loginBtn) loginBtn.style.display = '';
-        const out = document.getElementById('user-email'); const s = document.getElementById('sign-out-btn'); if (out) out.style.display = 'none'; if (s) s.style.display = 'none';
+        // ensure sign-in UI visible, hide user email
+        const loginBtnLocal = document.getElementById('login-btn'); if (loginBtnLocal) loginBtnLocal.style.display = '';
+        const out = document.getElementById('user-email'); if (out) out.style.display = 'none';
     }
 
     function showAppUI() {
@@ -151,25 +163,41 @@ script.onload = () => {
             s.src = 'https://accounts.google.com/gsi/client';
             s.defer = true;
             s.onload = () => {
-                // Initialize button and prompt
+                // Initialize GIS
                 window.google.accounts.id.initialize({
                     client_id: authConfig.clientId,
                     callback: handleCredentialResponse,
                 });
-                // Use a custom-styled login button for consistent theming
-                const loginBtn = document.getElementById('login-btn');
-                if (loginBtn) {
-                    loginBtn.onclick = () => {
-                        if (window.google && window.google.accounts && window.google.accounts.id) {
-                            window.google.accounts.id.prompt();
-                        }
-                    };
-                    loginBtn.style.display = '';
+
+                // Make sure the login button is visible and, if user clicked earlier, trigger the prompt now
+                const loginBtnLocal = document.getElementById('login-btn');
+                if (loginBtnLocal) loginBtnLocal.style.display = '';
+
+                // Call prompt with a callback to inspect why it may not be displayed
+                try {
+                    window.google.accounts.id.prompt((notif) => {
+                        try {
+                            console.debug('[GSI prompt notification]', notif);
+                            if (notif && typeof notif.isNotDisplayed === 'function' && notif.isNotDisplayed()) {
+                                const reason = notif.getNotDisplayedReason ? notif.getNotDisplayedReason() : 'unknown';
+                                console.warn('GSI not displayed:', reason);
+                                showGsiStatus('Sign-in popup was not shown: ' + reason);
+                            } else if (notif && typeof notif.isSkippedMoment === 'function' && notif.isSkippedMoment()) {
+                                const reason = notif.getSkippedReason ? notif.getSkippedReason() : 'skipped';
+                                console.warn('GSI skipped moment:', reason);
+                                showGsiStatus('Sign-in popup skipped: ' + reason);
+                            } else {
+                                showGsiStatus('');
+                            }
+                        } catch (e) { /* ignore */ }
+                    });
+                } catch (e) {
+                    /* ignore prompt errors */
                 }
 
-                // Auto prompt if no token present
-                if (!getIdToken()) {
-                    window.google.accounts.id.prompt();
+                if (pendingPrompt) {
+                    try { window.google.accounts.id.prompt(); } catch (e) { /* ignore */ }
+                    pendingPrompt = false;
                 }
             };
             document.head.appendChild(s);
@@ -220,6 +248,19 @@ script.onload = () => {
         });
     }
 
+    // Show a short status message under the login button (for diagnostic / user hints)
+    function showGsiStatus(msg) {
+        const el = document.getElementById('gsi-status');
+        if (!el) return;
+        if (!msg) {
+            el.style.display = 'none';
+            el.textContent = '';
+            return;
+        }
+        el.style.display = 'block';
+        el.textContent = msg;
+    }
+
     // Auth-aware fetch wrapper
     async function authFetch(url, opts) {
         opts = opts || {};
@@ -233,8 +274,11 @@ script.onload = () => {
             // token may be invalid/expired — clear and prompt sign-in
             setIdToken(null);
             showSignedOut();
+            showGsiStatus('Session expired, please sign in');
             if (window.google && window.google.accounts && window.google.accounts.id) {
-                window.google.accounts.id.prompt();
+                window.google.accounts.id.prompt((notif) => {
+                    console.debug('[GSI re-prompt]', notif);
+                });
             }
         }
         return res;
