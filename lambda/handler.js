@@ -242,6 +242,9 @@ exports.handler = async function (event) {
 
             // probe whether a valid API key was presented (used by the client to hide the sign-in button)
             if (reqPath === '/api/key_status') {
+                // In LOCAL_DEV mode treat the environment as authenticated for convenience
+                if (process.env.LOCAL_DEV === '1') return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ ok: true, local_dev: true }) };
+
                 const headerKey = getApiKeyFromHeaders(headers);
                 const cookieKey = getApiKeyFromCookies(headers);
                 const queryKey = getApiKeyFromQuery(event);

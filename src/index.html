@@ -308,6 +308,41 @@
             color: var(--text);
         }
 
+        /* When the page requires authentication, hide the main app UI and center the sign-in button */
+        body.auth-required {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg);
+        }
+        body.auth-required #main-controls,
+        body.auth-required #chart,
+        body.auth-required #search-results {
+            display: none !important;
+        }
+        body.auth-required #controls {
+            width: auto;
+            justify-content: center;
+            border-bottom: none;
+        }
+        body.auth-required #theme-toggle {
+            display: none !important;
+        }
+        body.auth-required #login-btn {
+            display: inline-block !important;
+            font-weight:600;
+            padding:10px 14px;
+            background: var(--node-stroke-selected);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+        }
+        body.auth-required #login-btn:hover {
+            filter: brightness(0.95);
+        }
+
         #chart .chart-meta.collapsed {
             display: flex;
             align-items: center;
@@ -342,15 +377,17 @@
 
 <body>
     <div id="controls">
-        <input id="person-search" placeholder="Search person by name or id" />
-        <button id="search-btn">Search</button>
+        <div id="main-controls" style="display:flex;gap:8px;align-items:center;flex:1">
+            <input id="person-search" placeholder="Search person by name or id" />
+            <button id="search-btn">Search</button>
+        </div>
         <button id="theme-toggle" class="theme-toggle icon-only" aria-pressed="false" title="Toggle theme"
             aria-label="Toggle theme">
             <span class="icon" aria-hidden="true">🌗</span>
             <span class="label">Theme</span>
         </button>
         <div id="auth-controls" style="display:flex;align-items:center;gap:8px;margin-left:8px">
-            <div id="gsi-button"></div>
+            <button id="login-btn" style="display:none;padding:8px 12px;border:1px solid var(--border);background:var(--page-bg);color:var(--text);border-radius:6px;cursor:pointer;">Login with Google</button>
             <button id="sign-out-btn" style="display:none;padding:8px 10px;border:1px solid var(--border);background:transparent;">Sign out</button>
             <span id="user-email" style="display:none;color:var(--muted);font-size:13px"></span>
         </div>

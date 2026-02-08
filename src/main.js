@@ -91,21 +91,58 @@ script.onload = () => {
         } catch (e) { return {}; }
     }
 
+    function isIdTokenValid(token) {
+        if (!token) return false;
+        const p = decodeJwtPayload(token);
+        if (!p) return false;
+        if (!p.exp) return false;
+        const now = Math.floor(Date.now() / 1000);
+        return now < p.exp;
+    }
+
+    function showLoginOnly() {
+        document.body.classList.add('auth-required');
+        // ensure sign-in UI visible, hide user email and sign-out
+        const loginBtn = document.getElementById('login-btn'); if (loginBtn) loginBtn.style.display = '';
+        const out = document.getElementById('user-email'); const s = document.getElementById('sign-out-btn'); if (out) out.style.display = 'none'; if (s) s.style.display = 'none';
+    }
+
+    function showAppUI() {
+        document.body.classList.remove('auth-required');
+        // show app components
+        const loginBtn = document.getElementById('login-btn'); if (loginBtn) loginBtn.style.display = 'none';
+        const out = document.getElementById('user-email'); if (out && out.textContent) out.style.display = 'inline-block';
+        const s = document.getElementById('sign-out-btn'); if (s && out && out.textContent) s.style.display = 'inline-block';
+    }
+
     async function initAuth() {
         const cfg = await fetchConfig();
 
-        // First, probe whether an API key is already present (cookies or header). If so, hide GSI button.
+        // First, probe whether an API key is already present (cookies or header). If so, hide GSI button and show app UI.
         try {
             const res = await fetch('/api/key_status', { credentials: 'include' });
             if (res.ok) {
-                // API key present and valid — hide sign-in UI
-                showSignedOut();
-                const g = document.getElementById('gsi-button'); if (g) g.style.display = 'none';
+                // API key present and valid — hide sign-in UI and show app
+                showAppUI();
                 return;
             }
         } catch (e) {
             // ignore — proceed to GIS init
         }
+
+        // Check for a locally stored id_token and validate it
+        const existing = getIdToken();
+        if (existing && isIdTokenValid(existing)) {
+            const p = decodeJwtPayload(existing);
+            if (p && p.email) {
+                showSignedIn(p.email);
+                showAppUI();
+                return;
+            }
+        }
+
+        // No API key and no valid id_token -> show login-only UI and initialize GIS if available
+        showLoginOnly();
 
         if (cfg && cfg.google_client_id) {
             authConfig.clientId = cfg.google_client_id;
@@ -119,17 +156,20 @@ script.onload = () => {
                     client_id: authConfig.clientId,
                     callback: handleCredentialResponse,
                 });
-                window.google.accounts.id.renderButton(
-                    document.getElementById('gsi-button'),
-                    { theme: 'outline', size: 'large', text: 'signin_with' }
-                );
+                // Use a custom-styled login button for consistent theming
+                const loginBtn = document.getElementById('login-btn');
+                if (loginBtn) {
+                    loginBtn.onclick = () => {
+                        if (window.google && window.google.accounts && window.google.accounts.id) {
+                            window.google.accounts.id.prompt();
+                        }
+                    };
+                    loginBtn.style.display = '';
+                }
 
                 // Auto prompt if no token present
                 if (!getIdToken()) {
                     window.google.accounts.id.prompt();
-                } else {
-                    const p = decodeJwtPayload(getIdToken());
-                    if (p && p.email) showSignedIn(p.email);
                 }
             };
             document.head.appendChild(s);
@@ -154,8 +194,8 @@ script.onload = () => {
         out.textContent = email;
         out.style.display = 'inline-block';
         signOut.style.display = 'inline-block';
-        // hide the GSI button container to avoid double sign-in
-        const g = document.getElementById('gsi-button'); if (g) g.style.display = 'none';
+        // hide the login button to avoid double sign-in
+        const loginBtn = document.getElementById('login-btn'); if (loginBtn) loginBtn.style.display = 'none';
     }
 
     function showSignedOut() {
@@ -164,7 +204,7 @@ script.onload = () => {
         out.textContent = '';
         out.style.display = 'none';
         signOut.style.display = 'none';
-        const g = document.getElementById('gsi-button'); if (g) g.style.display = '';
+        const loginBtn = document.getElementById('login-btn'); if (loginBtn) loginBtn.style.display = '';
     }
 
     document.getElementById('sign-out-btn').addEventListener('click', (e) => {
