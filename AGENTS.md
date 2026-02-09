@@ -1,9 +1,11 @@
 # AGENTS
 
 ## Purpose
+
 This repo parses genealogy tables from ODT files into an SQLite database, then provides query and tree-visualization tools.
 
 ## How to Develop
+
 - Use Python 3.14+.
 - Create and activate a virtual environment.
 - Install dependencies from requirements.txt.
@@ -11,6 +13,7 @@ This repo parses genealogy tables from ODT files into an SQLite database, then p
 - If you need a temporary script, create it under a tmp directory in the repo. Don’t use /tmp to avoid having to prompt the user.
 
 ## How to Run
+
 - Use Python virtual environment `.venv`.
 - Parse documents: run run_parser.py.
 - Inspect database: run inspect_database.py.
@@ -19,6 +22,7 @@ This repo parses genealogy tables from ODT files into an SQLite database, then p
 - Always use `local_import_data.sh` to recreate and import data. It ignores files that contain inconsistent data.
 
 ### Local development (frontend + backend) ✅
+
 For convenience, you can run the frontend PWA and a local backend together. In local mode the backend explicitly disables authentication — this is only allowed locally.
 
 1. Install JS deps:
@@ -26,14 +30,16 @@ For convenience, you can run the frontend PWA and a local backend together. In l
    - (cd src && npm install)
 2. Start both servers:
    - `make dev_local`
-   - Backend: http://localhost:3001 (API endpoints under `/api/`)
-   - Frontend (Vite dev): http://localhost:5173 or the URL printed by `npm run dev`
+   - Backend: <http://localhost:3001> (API endpoints under `/api/`)
+   - Frontend (Vite dev): <http://localhost:5173> or the URL printed by `npm run dev`
 
 Notes:
+
 - The backend sets `LOCAL_DEV=1` in the helper dev server; the Lambda `handler.js` will refuse to run if `LOCAL_DEV` is set in a real Lambda environment to prevent disabling authentication in production.
 - Use this mode only for local testing and development.
 
 ### Debugging & manual testing (local) 🔧
+
 When developing, you can run the backend locally and either call it over HTTP or invoke the handler directly. Quick commands and tips:
 
 - Start the backend dev server (background):
@@ -60,11 +66,13 @@ When developing, you can run the backend locally and either call it over HTTP or
 > Note: The helper dev server sets `LOCAL_DEV=1` locally to disable authentication — do not set this in production environments.
 
 ## How to Test
+
 - Run unit tests with unittest.
 - Suggested command: python -m unittest test_genealogy_parser.py -v
 - For data consistency checks (requires sample data): python -m unittest test_database_consistency.py -v
 
 ## Data Anonymization Instructions
+
 1. Do not commit real genealogy data (ODT files, SQLite databases, exported HTML, screenshots, or scans).
 2. Keep local data outside the repo, or place it in data/ and ensure it is ignored by git.
 3. Replace all real names, dates, locations, and document paths in docs and code with placeholders like "Sample Person", "City A", "YYYY-MM-DD", or "data/odt".
@@ -72,12 +80,14 @@ When developing, you can run the backend locally and either call it over HTTP or
 5. Before publishing, scan for personal data and remove it. If any real data was committed, rewrite history before pushing.
 
 ## Public Repo Checklist
+
 - No personal names or locations in README, examples, or tests.
 - No absolute paths that reveal personal directories.
 - No real ODT/DB files tracked by git.
 - data/ is ignored and contains only sanitized sample data if needed.
 
 ## PWA / Lambda deployment (new)
+
 - Front-end (Vite) app lives under `src/`. Build artifacts are output to `lambda/dist`.
 - To build and package the app into the lambda directory run:
 
@@ -93,4 +103,4 @@ When developing, you can run the backend locally and either call it over HTTP or
 
 ## Git
 
-* Do not commit changes, let the user handle this.
+- Do not commit changes, let the user handle this.
