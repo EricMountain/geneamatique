@@ -79,7 +79,8 @@ class TestTreeUtils(unittest.TestCase):
     def test_build_ancestor_tree(self):
         # Put a name_comment on the root person and verify it is carried into the node
         cur = self.conn.cursor()
-        cur.execute("UPDATE individuals SET name_comment = ? WHERE id = ?", ('Note for A', 1))
+        cur.execute(
+            "UPDATE individuals SET name_comment = ? WHERE id = ?", ('Note for A', 1))
         self.conn.commit()
 
         tree = build_ancestor_tree(self.conn, 1, 'T1')
@@ -103,6 +104,7 @@ class TestTreeUtils(unittest.TestCase):
 
             # old_id should no longer be part of the node dict
             self.assertNotIn('old_id', tree)
+
     def test_build_descendant_tree(self):
         tree = build_descendant_tree(self.conn, 1, 'T1')
         self.assertIsNotNone(tree, "build_descendant_tree returned None")
