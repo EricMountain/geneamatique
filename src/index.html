@@ -317,11 +317,13 @@
             /* Use the page background so the view appears full-screen and not a small white rectangle */
             background: var(--page-bg);
         }
+
         body.auth-required #main-controls,
         body.auth-required #chart,
         body.auth-required #search-results {
             display: none !important;
         }
+
         body.auth-required #controls {
             width: 100%;
             justify-content: center;
@@ -329,19 +331,22 @@
             padding: 40px 20px;
             box-shadow: none;
         }
+
         body.auth-required #theme-toggle {
             display: none !important;
         }
+
         body.auth-required #login-btn {
             display: inline-block !important;
-            font-weight:600;
-            padding:10px 18px;
+            font-weight: 600;
+            padding: 10px 18px;
             background: var(--node-stroke-selected);
             color: white;
             border: none;
             border-radius: 8px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
         }
+
         body.auth-required #login-btn:hover {
             filter: brightness(0.95);
         }
@@ -353,8 +358,9 @@
             border-radius: 6px;
             transition: background 160ms ease, color 160ms ease;
         }
+
         #user-email:hover {
-            background: rgba(0,0,0,0.04);
+            background: rgba(0, 0, 0, 0.04);
             color: var(--text);
         }
 
@@ -403,9 +409,12 @@
         </button>
         <div id="auth-controls" style="display:flex;align-items:center;gap:8px;margin-left:8px">
             <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-              <button id="login-btn" style="display:none;padding:8px 12px;border:1px solid var(--border);background:var(--page-bg);color:var(--text);border-radius:6px;cursor:pointer;">Login with Google</button>
+                <button id="login-btn"
+                    style="display:none;padding:8px 12px;border:1px solid var(--border);background:var(--page-bg);color:var(--text);border-radius:6px;cursor:pointer;">Login
+                    with Google</button>
             </div>
-            <span id="user-email" style="display:none;color:var(--muted);font-size:13px;cursor:pointer;" title="Click to sign out of this app"></span>
+            <span id="user-email" style="display:none;color:var(--muted);font-size:13px;cursor:pointer;"
+                title="Click to sign out of this app"></span>
         </div>
     </div>
 

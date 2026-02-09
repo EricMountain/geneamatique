@@ -170,7 +170,9 @@ script.onload = () => {
         try {
             const res = await fetch('/api/key_status', { credentials: 'include' });
             if (res.ok) {
-                // API key present and valid — hide sign-in UI and show app
+                const j = await res.json().catch(() => ({}));
+                if (j && j.email) showSignedIn(j.email);
+                // API key or id_token cookie present and valid — show app UI
                 showAppUI();
                 return;
             }
@@ -239,8 +241,11 @@ script.onload = () => {
         if (!resp || !resp.credential) return;
         setIdToken(resp.credential);
         const payload = decodeJwtPayload(resp.credential);
-        if (payload && payload.email) showSignedIn(payload.email);
-        // After sign-in, re-run initial hydration to fetch last viewed tree
+        if (payload && payload.email) {
+            showSignedIn(payload.email);
+        }
+        // Show main app UI and re-run initial hydration to fetch last viewed tree
+        showAppUI();
         const last = localStorage.getItem('last_db_id');
         if (last) {
             try { fetchTreeFor(last); } catch (e) { /* ignore */ }

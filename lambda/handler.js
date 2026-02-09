@@ -236,24 +236,41 @@ exports.handler = async function (event) {
         // Basic JSON helpers
         const jsonHeaders = { 'Content-Type': 'application/json', ...corsHeaders() };
 
-            if (reqPath === '/api/config') {
-                return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ google_client_id: GOOGLE_CLIENT_ID || null, has_allowed_users_table: !!ALLOWED_USERS_TABLE }) };
+        if (reqPath === '/api/config') {
+            return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ google_client_id: GOOGLE_CLIENT_ID || null, has_allowed_users_table: !!ALLOWED_USERS_TABLE }) };
+        }
+
+        // probe whether a valid API key was presented (used by the client to hide the sign-in button)
+        if (reqPath === '/api/key_status') {
+            // In LOCAL_DEV mode treat the environment as authenticated for convenience
+            if (process.env.LOCAL_DEV === '1') return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ ok: true, local_dev: true }) };
+
+            // Prefer server-side ID token cookie if present
+            const idToken = getIdTokenFromCookies(headers);
+            if (idToken) {
+                try {
+                    const payload = await verifyGoogleIdToken(idToken);
+                    const email = payload && payload.email && String(payload.email).toLowerCase();
+                    if (!email) return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
+                    const allowed = await checkAllowedUser(email);
+                    if (!allowed) return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
+                    return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ ok: true, email }) };
+                } catch (err) {
+                    console.error('ID token cookie validation failed', err);
+                    return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
+                }
             }
 
-            // probe whether a valid API key was presented (used by the client to hide the sign-in button)
-            if (reqPath === '/api/key_status') {
-                // In LOCAL_DEV mode treat the environment as authenticated for convenience
-                if (process.env.LOCAL_DEV === '1') return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ ok: true, local_dev: true }) };
-
-                const headerKey = getApiKeyFromHeaders(headers);
-                const cookieKey = getApiKeyFromCookies(headers);
-                const queryKey = getApiKeyFromQuery(event);
-                const key = headerKey || cookieKey || queryKey;
-                if (!key) return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
-                const ok = await checkApiKey(key);
-                if (!ok) return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
-                return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ ok: true }) };
-            }
+            // Fallback to API key check
+            const headerKey = getApiKeyFromHeaders(headers);
+            const cookieKey = getApiKeyFromCookies(headers);
+            const queryKey = getApiKeyFromQuery(event);
+            const key = headerKey || cookieKey || queryKey;
+            if (!key) return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
+            const ok = await checkApiKey(key);
+            if (!ok) return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ ok: false }) };
+            return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ ok: true }) };
+        }
 
         // helper to open DB (was accidentally removed; required by local dev handler)
         const dbOpen = () => new sqlite3.Database(DB_PATH, sqlite3.OPEN_READONLY);
@@ -624,6 +641,54 @@ exports.handler = async function (event) {
         return { statusCode: 404, headers: { ...corsHeaders() }, body: 'Not Found' };
     }
 
+
+    // OAuth2 callback handling (redirect-based fallback): exchange code for tokens and set id_token cookie
+    if (reqPath === '/oauth2callback' && (method === 'GET')) {
+        const params = event.queryStringParameters || {};
+        if (params.error) {
+            const headersOut = { ...corsHeaders() };
+            return { statusCode: 400, headers: headersOut, body: 'OAuth error: ' + params.error };
+        }
+        const code = params.code;
+        const state = params.state || '/';
+        if (!code) return { statusCode: 400, headers: corsHeaders(), body: 'Missing code' };
+
+        if (!OAuth2Client) return { statusCode: 500, headers: corsHeaders(), body: 'google-auth-library not installed' };
+        if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) return { statusCode: 500, headers: corsHeaders(), body: 'GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured' };
+
+        try {
+            const proto = headers['x-forwarded-proto'] || 'https';
+            const host = headers['x-forwarded-host'] || headers['host'] || headers['Host'];
+            const redirectUri = `${proto}://${host}/oauth2callback`;
+            const client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
+            const tokenRes = await client.getToken({ code, redirect_uri: redirectUri });
+            const tokens = tokenRes.tokens;
+            const idToken = tokens.id_token;
+            if (!idToken) return { statusCode: 400, headers: corsHeaders(), body: 'No id_token returned by Google' };
+
+            // verify id token and allowed user
+            const payload = await verifyGoogleIdToken(idToken);
+            const email = payload && payload.email && String(payload.email).toLowerCase();
+            if (!email) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid token: no email' };
+            const allowed = await checkAllowedUser(email);
+            if (!allowed) return { statusCode: 403, headers: corsHeaders(), body: 'Unauthorized user' };
+
+            // set id_token cookie for subsequent requests
+            const maxAge = 60 * 60 * 24 * 7; // 7 days
+            const cookieValue = `id_token=${encodeURIComponent(idToken)}; Max-Age=${maxAge}; Path=/; SameSite=Lax; Secure; HttpOnly`;
+
+            // sanitize state: only allow a relative path starting with '/'
+            let redirectTo = '/';
+            try {
+                if (state && String(state).startsWith('/')) redirectTo = state;
+            } catch (e) { }
+
+            return { statusCode: 302, headers: { ...corsHeaders(), 'Set-Cookie': cookieValue, Location: redirectTo }, body: '' };
+        } catch (err) {
+            console.error('OAuth callback error', err);
+            return { statusCode: 500, headers: corsHeaders(), body: 'OAuth exchange failed' };
+        }
+    }
 
     // Map / to index.html
     let filePath = reqPath === '/' ? '/index.html' : reqPath;
