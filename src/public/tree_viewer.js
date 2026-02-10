@@ -329,7 +329,8 @@ async function render() {
     const nodeEnter = nodes.enter().append('g')
         .attr('class', 'node')
         .attr('transform', d => `translate(${d.x},${d.y})`)
-        .style('cursor', 'pointer');
+        .style('cursor', 'pointer')
+        .style('--node-text', d => genderColor(d.data).text);
 
     nodeEnter.append('rect')
         .attr('rx', 4)
@@ -360,11 +361,13 @@ async function render() {
         .style('stroke', d => genderColor(d.data).accent)
         .style('stroke-width', '1.5px');
 
+    // Set per-node text color via CSS variable so name and details inherit the same color
+    nodeUpdate.style('--node-text', d => genderColor(d.data).text);
+
     nodeUpdate.select('.name')
         .transition().duration(400)
         .attr('x', d => d.width / 2)
-        .text(d => d.data.name)
-        .style('fill', d => genderColor(d.data).text);
+        .text(d => d.data.name);
 
     // Details
     nodeUpdate.each(function (d) {

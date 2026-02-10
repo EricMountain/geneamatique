@@ -216,13 +216,14 @@
         .node text.name {
             font: bold 13px sans-serif;
             pointer-events: none;
-            fill: var(--text);
+            fill: var(--node-text, var(--text));
         }
 
         .node text.details {
             font: 10px sans-serif;
+            font-weight: normal;
             pointer-events: none;
-            fill: var(--muted);
+            fill: var(--node-text, var(--text));
         }
 
         .node text.label {
