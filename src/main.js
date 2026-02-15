@@ -101,6 +101,18 @@ script.onload = () => {
     }
 
     let pendingPrompt = false;
+
+    // One-time prompt-moment listener helpers (used instead of calling deprecated
+    // One-Tap notification status methods). Call `_registerPromptMomentListener`
+    // before invoking `google.accounts.id.prompt()` when you need a per-call
+    // decision based on the prompt moment.
+    let _gsiPromptListeners = [];
+    function _registerPromptMomentListener(cb) { _gsiPromptListeners.push(cb); }
+    function _dispatchPromptMoment(moment) {
+        _gsiPromptListeners.forEach(fn => { try { fn(moment); } catch (e) { /* ignore */ } });
+        _gsiPromptListeners = [];
+    }
+
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) {
         // attach click handler that tries GIS prompt first and falls back to redirect
@@ -111,25 +123,26 @@ script.onload = () => {
 
             pendingPrompt = true;
             let handled = false;
-            // If GIS available, ask it to show prompt and use notification to decide whether to fallback
+            // If GIS available, ask it to show prompt and use the global momentListener
+            // (we register a one-time listener for this particular click). This avoids
+            // calling deprecated `notif.*` status methods which trigger GSI warnings
+            // and may be removed when FedCM is mandatory.
             if (window.google && window.google.accounts && window.google.accounts.id) {
                 try {
-                    window.google.accounts.id.prompt((notif) => {
+                    _registerPromptMomentListener((moment) => {
                         try {
-                            if (notif && notif.isDisplayed && notif.isDisplayed()) {
-                                handled = true; // prompt displayed, we won't redirect
-                            } else if (notif && notif.isNotDisplayed && notif.isNotDisplayed()) {
-                                // not displayed -> fallback to redirect
-                                handled = true;
-                                window.location.href = oauthUrl;
-                            } else if (notif && notif.isSkippedMoment && notif.isSkippedMoment()) {
-                                handled = true;
+                            handled = true;
+                            const t = (moment && moment.type) || '';
+                            if (t === 'display') {
+                                // prompt shown — leave flow to GIS
+                            } else {
+                                // any other moment (skipped / not_displayed / dismissed) -> fallback
                                 window.location.href = oauthUrl;
                             }
-                        } catch (e) {
-                            // ignore and fallback
-                        }
+                        } catch (e) { /* ignore */ }
                     });
+
+                    window.google.accounts.id.prompt();
                 } catch (e) {
                     // prompt failed synchronously – fallback
                     handled = true;
@@ -205,25 +218,32 @@ script.onload = () => {
                 window.google.accounts.id.initialize({
                     client_id: authConfig.clientId,
                     callback: handleCredentialResponse,
+                    // Use `momentListener` for One Tap prompt moments (FedCM migration
+                    // friendly). Do NOT call deprecated notif.* methods anywhere in
+                    // the app — instead use this listener or register one-time
+                    // callbacks via `_registerPromptMomentListener` above.
+                    momentListener: (moment) => {
+                        try {
+                            console.debug('[GSI moment]', moment);
+                            // dispatch to any one-time listeners (login button flows)
+                            _dispatchPromptMoment(moment);
+                            const t = (moment && moment.type) || '';
+                            if (t === 'not_displayed') {
+                                console.warn('GSI not displayed (moment):', moment && moment.reason ? moment.reason : 'not_displayed');
+                            } else if (t === 'skipped') {
+                                console.warn('GSI skipped moment');
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
                 });
 
                 // Make sure the login button is visible and, if user clicked earlier, trigger the prompt now
                 const loginBtnLocal = document.getElementById('login-btn');
                 if (loginBtnLocal) loginBtnLocal.style.display = '';
 
-                // Call prompt with a callback to inspect why it may not be displayed
+                // Prompt (diagnostic / moment events are handled by the initialize() momentListener)
                 try {
-                    window.google.accounts.id.prompt((notif) => {
-                        try {
-                            console.debug('[GSI prompt notification]', notif);
-                            // No diagnostic UI shown to the user — keep behavior silent and fall back to redirect when needed
-                            if (notif && notif.isNotDisplayed && notif.isNotDisplayed()) {
-                                console.warn('GSI not displayed:', notif.getNotDisplayedReason ? notif.getNotDisplayedReason() : 'unknown');
-                            } else if (notif && notif.isSkippedMoment && notif.isSkippedMoment()) {
-                                console.warn('GSI skipped moment:', notif.getSkippedReason ? notif.getSkippedReason() : 'skipped');
-                            }
-                        } catch (e) { /* ignore */ }
-                    });
+                    window.google.accounts.id.prompt();
                 } catch (e) {
                     /* ignore prompt errors */
                 }
@@ -301,9 +321,7 @@ script.onload = () => {
             showSignedOut();
 
             if (window.google && window.google.accounts && window.google.accounts.id) {
-                window.google.accounts.id.prompt((notif) => {
-                    console.debug('[GSI re-prompt]', notif);
-                });
+                window.google.accounts.id.prompt();
             }
         }
         return res;
