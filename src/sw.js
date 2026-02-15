@@ -4,13 +4,25 @@ const ASSETS = [
     '/index.html',
     '/main.js',
     '/tree_viewer.js',
-    '/demo_tree.json',
     '/manifest.json'
 ];
 
 self.addEventListener('install', event => {
-    event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
-    self.skipWaiting();
+    // Try to cache listed assets but do not fail installation if some are missing
+    event.waitUntil((async () => {
+        const cache = await caches.open(CACHE_NAME);
+        await Promise.all(ASSETS.map(async (asset) => {
+            try {
+                const res = await fetch(asset, {cache: 'no-cache'});
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                await cache.put(asset, res.clone());
+            } catch (err) {
+                // Log and continue — a single missing/404 asset must not block SW install
+                console.warn('SW: failed to cache', asset, err && err.message);
+            }
+        }));
+        await self.skipWaiting();
+    })());
 });
 
 self.addEventListener('activate', event => {
