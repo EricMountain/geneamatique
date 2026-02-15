@@ -7,6 +7,11 @@ build_pwa:
 	@echo "Building PWA into lambda/dist and installing lambda deps..."
 	@./build_pwa.sh
 
+# Start a filesystem watcher that automatically runs `./build_pwa.sh` when source files change.
+watch_build:
+	@echo "Starting file watcher for PWA builds (press Ctrl-C to stop)..."
+	@./scripts/watch_build.sh
+
 terraform-init:
 	@echo "Initializing Terraform (terraform/aws)..."
 	@terraform -chdir=terraform/aws init
