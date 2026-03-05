@@ -179,6 +179,11 @@ script.onload = () => {
     async function initAuth() {
         const cfg = await fetchConfig();
 
+        // Always store the client id so the login button works even after sign-out.
+        if (cfg && cfg.google_client_id) {
+            authConfig.clientId = cfg.google_client_id;
+        }
+
         // First, probe whether an API key is already present (cookies or header). If so, hide GSI button and show app UI.
         try {
             const res = await fetch('/api/key_status', { credentials: 'include' });
@@ -211,8 +216,7 @@ script.onload = () => {
         // No API key and no valid id_token -> show login-only UI and initialize GIS if available
         showLoginOnly();
 
-        if (cfg && cfg.google_client_id) {
-            authConfig.clientId = cfg.google_client_id;
+        if (authConfig.clientId) {
             // Load GIS script
             const s = document.createElement('script');
             s.src = 'https://accounts.google.com/gsi/client';
