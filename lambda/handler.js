@@ -22,8 +22,27 @@ const DB_PATH = process.env.GENEALOGY_DB || path.join(__dirname, 'dist', 'data',
 const TABLE = process.env.API_KEYS_TABLE; // legacy api-key table
 const ALLOWED_USERS_TABLE = process.env.ALLOWED_USERS_TABLE; // DynamoDB table that contains allowed Google user emails (partition key: "email")
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // Google OAuth Client ID used to validate ID tokens
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET; // (optional) client secret used for server-side code exchange
 const dynamo = new DynamoDBClient({});
+
+// --- Google client secret: fetched from SSM SecureString (cached across warm invocations) ---
+const GOOGLE_CLIENT_SECRET_SSM = process.env.GOOGLE_CLIENT_SECRET_SSM; // SSM parameter name
+let _cachedGoogleClientSecret = process.env.GOOGLE_CLIENT_SECRET || null; // fallback for LOCAL_DEV / migration
+
+async function getGoogleClientSecret() {
+    if (_cachedGoogleClientSecret) return _cachedGoogleClientSecret;
+    if (!GOOGLE_CLIENT_SECRET_SSM) return null;
+    try {
+        // @aws-sdk/client-ssm is available in the nodejs22.x Lambda runtime
+        const { SSMClient, GetParameterCommand } = require('@aws-sdk/client-ssm');
+        const ssm = new SSMClient({});
+        const res = await ssm.send(new GetParameterCommand({ Name: GOOGLE_CLIENT_SECRET_SSM, WithDecryption: true }));
+        _cachedGoogleClientSecret = res.Parameter && res.Parameter.Value;
+        return _cachedGoogleClientSecret;
+    } catch (err) {
+        console.error('Failed to fetch Google client secret from SSM', err);
+        return null;
+    }
+}
 
 // Safety: prevent LOCAL_DEV mode from being enabled in production Lambda environments.
 // This protects against accidentally deploying with authentication disabled.
@@ -138,36 +157,40 @@ exports.handler = async function (event) {
 
     let setCookieHeader = null;
 
+    // Helper functions used both during authentication and in /api/key_status + /oauth2callback.
+    // Must be declared at handler scope (not inside the if-block) so they remain accessible.
+    const getBearerToken = (headers) => {
+        if (!headers) return null;
+        const a = headers['authorization'] || headers['Authorization'] || headers['AUTHORIZATION'];
+        if (!a) return null;
+        if (a.startsWith('Bearer ')) return a.slice('Bearer '.length).trim();
+        return null;
+    };
+
+    const verifyGoogleIdToken = async (idToken) => {
+        if (!OAuth2Client) throw new Error('google-auth-library not installed');
+        if (!GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID not configured');
+        const client = new OAuth2Client(GOOGLE_CLIENT_ID);
+        const ticket = await client.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
+        return ticket.getPayload();
+    };
+
+    const checkAllowedUser = async (email) => {
+        if (!ALLOWED_USERS_TABLE) return false;
+        try {
+            const command = new GetItemCommand({ TableName: ALLOWED_USERS_TABLE, Key: { email: { S: email } } });
+            const res = await dynamo.send(command);
+            return !!res.Item;
+        } catch (err) {
+            console.error('DynamoDB error (allowed users)', err);
+            return false;
+        }
+    };
+
     if (!unauthenticated) {
-        // If an Authorization: Bearer <id_token> header is present, prefer Google OAuth verification
-        const getBearerToken = (headers) => {
-            if (!headers) return null;
-            const a = headers['authorization'] || headers['Authorization'] || headers['AUTHORIZATION'];
-            if (!a) return null;
-            if (a.startsWith('Bearer ')) return a.slice('Bearer '.length).trim();
-            return null;
-        };
+        let authenticated = false;
 
-        const verifyGoogleIdToken = async (idToken) => {
-            if (!OAuth2Client) throw new Error('google-auth-library not installed');
-            if (!GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID not configured');
-            const client = new OAuth2Client(GOOGLE_CLIENT_ID);
-            const ticket = await client.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
-            return ticket.getPayload();
-        };
-
-        const checkAllowedUser = async (email) => {
-            if (!ALLOWED_USERS_TABLE) return false;
-            try {
-                const command = new GetItemCommand({ TableName: ALLOWED_USERS_TABLE, Key: { email: { S: email } } });
-                const res = await dynamo.send(command);
-                return !!res.Item;
-            } catch (err) {
-                console.error('DynamoDB error (allowed users)', err);
-                return false;
-            }
-        };
-
+        // 1. Try Authorization: Bearer <id_token> header (client-side GIS flow)
         const bearer = getBearerToken(headers);
         if (bearer) {
             try {
@@ -176,13 +199,17 @@ exports.handler = async function (event) {
                 if (!email) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid token: no email' };
                 const allowed = await checkAllowedUser(email);
                 if (!allowed) return { statusCode: 403, headers: corsHeaders(), body: 'Unauthorized user' };
-                // authenticated via Google; continue
+                authenticated = true; // bearer verified
             } catch (err) {
-                console.error('Google auth error', err);
-                return { statusCode: 401, headers: corsHeaders(), body: 'Invalid or expired token' };
+                console.error('Google bearer auth error (will try cookie/API key fallback)', err);
+                // Do NOT hard-fail: fall through to cookie / API key check.
+                // A stale bearer sent alongside a valid id_token cookie should
+                // not lock the user out.
             }
-        } else {
-            // Try id_token cookie (server-side session from earlier OAuth redirect)
+        }
+
+        // 2. Try id_token cookie (server-side session from OAuth redirect)
+        if (!authenticated) {
             const idTokenFromCookie = getIdTokenFromCookies(headers);
             if (idTokenFromCookie) {
                 try {
@@ -191,14 +218,16 @@ exports.handler = async function (event) {
                     if (!email) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid token: no email' };
                     const allowed = await checkAllowedUser(email);
                     if (!allowed) return { statusCode: 403, headers: corsHeaders(), body: 'Unauthorized user' };
-                    // authenticated via cookie-stored id_token; continue
+                    authenticated = true; // cookie verified
                 } catch (err) {
                     console.error('Google cookie auth error', err);
-                    // fall through to normal API key checks / redirect
+                    // fall through to API key check
                 }
             }
+        }
 
-            // fallback to API key behavior for backwards compatibility
+        // 3. Fallback to API key (legacy)
+        if (!authenticated) {
             const headerKey = getApiKeyFromHeaders(headers);
             const cookieKey = getApiKeyFromCookies(headers);
             const queryKey = getApiKeyFromQuery(event);
@@ -206,25 +235,20 @@ exports.handler = async function (event) {
             const key = headerKey || cookieKey || queryKey;
 
             if (!key) {
-                // No API key and no token -> for most API requests reject; for HTML pages continue and let the client-side app handle sign-in
-                // Special-case: allow unauthenticated requests through to `/api/key_status` so the client can probe whether an API key cookie/header is present
-                // Allow unauthenticated probes to /api/key_status and public config to /api/config
-                if (reqPath && reqPath.startsWith('/api/') && reqPath !== '/api/key_status' && reqPath !== '/api/config') {
+                // No auth at all — reject API requests (except probes)
+                if (reqPath && reqPath.startsWith('/api/') && reqPath !== '/api/key_status' && reqPath !== '/api/config' && reqPath !== '/api/logout') {
                     return { statusCode: 401, headers: corsHeaders(), body: 'Missing API key or Authorization token' };
                 }
-                // For non-API requests (HTML/static), fall through so index.html is served and the browser can run GIS
-                // For `/api/key_status`, we fall through to the endpoint which will perform its own key check
+                // For non-API requests (HTML/static), fall through so index.html is served
             } else {
                 const ok = await checkApiKey(key);
                 if (!ok) return { statusCode: 403, headers: corsHeaders(), body: 'Invalid API key' };
 
-                // If the client provided the key via query param and there is no cookie, set a cookie so future requests are authenticated
                 if (queryKey && !cookieKey) {
                     setCookieHeader = makeSetCookieHeader(key);
                 }
             }
 
-            // If the client provided the key via query param and there is no cookie, set a cookie so future requests are authenticated
             if (queryKey && !cookieKey) {
                 setCookieHeader = makeSetCookieHeader(key);
             }
@@ -238,6 +262,12 @@ exports.handler = async function (event) {
 
         if (reqPath === '/api/config') {
             return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ google_client_id: GOOGLE_CLIENT_ID || null, has_allowed_users_table: !!ALLOWED_USERS_TABLE }) };
+        }
+
+        // Sign out: expire the HttpOnly id_token cookie so the session is truly cleared
+        if (reqPath === '/api/logout') {
+            const expireCookie = 'id_token=; Max-Age=0; Path=/; SameSite=Lax; Secure; HttpOnly';
+            return { statusCode: 200, headers: { ...jsonHeaders, 'Set-Cookie': expireCookie }, body: JSON.stringify({ ok: true }) };
         }
 
         // probe whether a valid API key was presented (used by the client to hide the sign-in button)
@@ -654,13 +684,14 @@ exports.handler = async function (event) {
         if (!code) return { statusCode: 400, headers: corsHeaders(), body: 'Missing code' };
 
         if (!OAuth2Client) return { statusCode: 500, headers: corsHeaders(), body: 'google-auth-library not installed' };
-        if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) return { statusCode: 500, headers: corsHeaders(), body: 'GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured' };
+        const clientSecret = await getGoogleClientSecret();
+        if (!GOOGLE_CLIENT_ID || !clientSecret) return { statusCode: 500, headers: corsHeaders(), body: 'GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured' };
 
         try {
             const proto = headers['x-forwarded-proto'] || 'https';
             const host = headers['x-forwarded-host'] || headers['host'] || headers['Host'];
             const redirectUri = `${proto}://${host}/oauth2callback`;
-            const client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
+            const client = new OAuth2Client(GOOGLE_CLIENT_ID, clientSecret, redirectUri);
             const tokenRes = await client.getToken({ code, redirect_uri: redirectUri });
             const tokens = tokenRes.tokens;
             const idToken = tokens.id_token;
@@ -686,7 +717,8 @@ exports.handler = async function (event) {
             return { statusCode: 302, headers: { ...corsHeaders(), 'Set-Cookie': cookieValue, Location: redirectTo }, body: '' };
         } catch (err) {
             console.error('OAuth callback error', err);
-            return { statusCode: 500, headers: corsHeaders(), body: 'OAuth exchange failed' };
+            const detail = (err && err.response && err.response.data) ? JSON.stringify(err.response.data) : (err && err.message) || 'unknown';
+            return { statusCode: 500, headers: corsHeaders(), body: 'OAuth exchange failed: ' + detail };
         }
     }
 

@@ -23,7 +23,10 @@ variable "log_retention_days" {
 }
 
 variable "google_client_secret" {
-  description = "(optional) Google OAuth client secret to allow server-side code exchange for ID tokens"
+  description = "(optional) Google OAuth client secret to allow server-side code exchange for ID tokens."
+  # When this variable is an empty string Terraform will *not* destroy an
+  # existing SSM parameter; the provider uses a data lookup and a lifecycle
+  # rule to keep previously-created parameters and policies in place.
   type        = string
   default     = ""
   sensitive   = true

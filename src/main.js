@@ -185,6 +185,10 @@ script.onload = () => {
             if (res.ok) {
                 const j = await res.json().catch(() => ({}));
                 if (j && j.email) showSignedIn(j.email);
+                // Cookie-based auth (or API key) is active. Clear any stale
+                // localStorage id_token so that authFetch does not send an
+                // expired Bearer header that would override the valid cookie.
+                setIdToken(null);
                 // API key or id_token cookie present and valid — show app UI
                 showAppUI();
                 return;
@@ -292,12 +296,14 @@ script.onload = () => {
     // Make the user email label act as the sign-out control (app-only sign-out)
     const userEmailEl = document.getElementById('user-email');
     if (userEmailEl) {
-        userEmailEl.addEventListener('click', (e) => {
+        userEmailEl.addEventListener('click', async (e) => {
             const email = userEmailEl.textContent || '';
             if (!email) return;
             const ok = confirm(`Sign out of this app as ${email}?`);
             if (!ok) return;
-            // App-only sign-out: clear local token and return to login-only UI
+            // Clear server-side HttpOnly id_token cookie
+            try { await fetch('/api/logout', { credentials: 'include' }); } catch (err) { /* ignore */ }
+            // Clear client-side state
             setIdToken(null);
             try { localStorage.removeItem('last_db_id'); } catch (err) { /* ignore */ }
             showLoginOnly();

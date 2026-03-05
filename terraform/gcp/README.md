@@ -1,5 +1,9 @@
 # Terraform: GCP OAuth client for Google Sign-in
 
+Note: this was never used. The project was created by hand in the GCP Console UI.
+
+## How to use
+
 This small Terraform module creates an OAuth brand and an OAuth client (IAP client) in Google Cloud and outputs a `client_id` and `client_secret` you can use as `GOOGLE_CLIENT_ID` for the Lambda.
 
 Usage

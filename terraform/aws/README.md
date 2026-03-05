@@ -29,3 +29,13 @@ This folder contains Terraform code to provision the Lambda function (packaged f
   - If users see a cached 403 after configuration changes, invalidate CloudFront (e.g., `aws cloudfront create-invalidation --distribution-id <id> --paths '/*'`).
   - If automatic hosted-zone discovery fails, set `cloudfront_hosted_zone_id = "Z..."` in `terraform.tfvars` and re-run plan/apply so the Route53 validation records and the A/ALIAS entry are created.
   - Ensure your Google OAuth client has both the CloudFront origin (`https://<your-domain>`) set as an Authorized JavaScript origin and `https://<your-domain>/oauth2callback` as an Authorized redirect URI.
+
+## OAuth2
+
+The `/oauth2callback` in `handler.js` needs both the `GOOGLE_CLIENT_ID` (public) and the `GOOGLE_CLIENT_SECRET` (private…). This will be stored in SSM for retrieval by the lambda on cold start:
+
+```shell
+cd terraform/aws && terraform apply -var='google_client_secret=YOUR_SECRET'
+```
+
+The helper `scripts/terraform_with_op.sh` provides a safe wrapper that obtains the secret from 1Password and avoids it ending up in shell history.

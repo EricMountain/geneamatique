@@ -7,11 +7,12 @@ Lambda handler serves static files from the `dist/` directory and authenticates 
 - `API_KEYS_TABLE` - The DynamoDB table name containing API keys (primary key `api_key`)
 - `ALLOWED_USERS_TABLE` - (optional) The DynamoDB table name containing allowed Google users (primary key `email`)
 - `GOOGLE_CLIENT_ID` - (optional) OAuth2 Client ID used to validate Google ID tokens
-- `GOOGLE_CLIENT_SECRET` - (optional) OAuth2 client secret used for server-side authorization-code exchanges
+- `GOOGLE_CLIENT_SECRET_SSM` - (optional) SSM Parameter Store parameter name that holds the OAuth2 client secret (SecureString, encrypted with the free `aws/ssm` KMS key). The Lambda fetches and decrypts the value at cold start and caches it.
+- `GOOGLE_CLIENT_SECRET` - (optional, legacy / local dev only) Plaintext fallback. If the SSM parameter is not configured, the handler reads this env var instead. Useful for `LOCAL_DEV` mode.
 
 **If `ALLOWED_USERS_TABLE` and `GOOGLE_CLIENT_ID` are set**, the Lambda will accept `Authorization: Bearer <Google ID token>` headers. It verifies the ID token audience using `GOOGLE_CLIENT_ID` and then checks that the authenticated user's email exists in `ALLOWED_USERS_TABLE` (partition key `email` as a string). If Google auth fails, the Lambda falls back to the `API_KEYS_TABLE` check for backward compatibility.
 
-Redirect fallback: If you enable a server-side redirect fallback (recommended to make login work even when One Tap is suppressed by the user), add `https://<lambda_function_url>/oauth2callback` to your OAuth client's authorized redirect URIs and set `GOOGLE_CLIENT_SECRET` in the Lambda env. The Lambda will exchange the authorization code for an ID token, verify it, check `ALLOWED_USERS_TABLE`, and set an HttpOnly `id_token` cookie before redirecting back to the app.
+Redirect fallback: If you enable a server-side redirect fallback (recommended to make login work even when One Tap is suppressed by the user), add `https://<lambda_function_url>/oauth2callback` to your OAuth client's authorized redirect URIs and provide the client secret via the `google_client_secret` Terraform variable. Terraform stores it in an SSM SecureString parameter and passes only the parameter name to the Lambda. The Lambda will exchange the authorization code for an ID token, verify it, check `ALLOWED_USERS_TABLE`, and set an HttpOnly `id_token` cookie before redirecting back to the app.
 
 ### Note for CloudFront / custom domains
 
