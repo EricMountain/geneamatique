@@ -35,9 +35,9 @@ export function initMap(containerId = 'map') {
  */
 function createEventIcon(type) {
     const iconConfig = {
-        birth: { symbol: '🔵', color: '#4A90E2', text: 'Birth' },
-        death: { symbol: '⚰️', color: '#666', text: 'Death' },
-        marriage: { symbol: '⭕', color: '#E24A90', text: 'Marriage' }
+        birth: { symbol: '🍼', color: '#4A90E2', text: 'Birth' },
+        death: { symbol: '🪦', color: '#666', text: 'Death' },
+        marriage: { symbol: '💍', color: '#E24A90', text: 'Marriage' }
     };
 
     const config = iconConfig[type] || iconConfig.birth;
