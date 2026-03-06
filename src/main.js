@@ -26,6 +26,77 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// View switcher - toggle between tree and map views
+let currentView = 'tree'; // Default to tree view
+let currentTreeData = null; // Store current tree data for map view
+let mapInitialized = false;
+
+const chartContainer = document.getElementById('chart');
+const mapContainer = document.getElementById('map-container');
+const treeViewBtn = document.getElementById('tree-view-btn');
+const mapViewBtn = document.getElementById('map-view-btn');
+
+// Import map viewer module dynamically
+let mapViewer = null;
+import('./map_viewer.js').then(module => {
+    mapViewer = module;
+}).catch(err => {
+    console.error('Failed to load map viewer module:', err);
+});
+
+function switchToTreeView() {
+    if (currentView === 'tree') return;
+    
+    currentView = 'tree';
+    chartContainer.style.display = 'block';
+    mapContainer.style.display = 'none';
+    
+    treeViewBtn.classList.add('active');
+    mapViewBtn.classList.remove('active');
+}
+
+function switchToMapView() {
+    if (currentView === 'map') return;
+    
+    currentView = 'map';
+    chartContainer.style.display = 'none';
+    mapContainer.style.display = 'block';
+    
+    treeViewBtn.classList.remove('active');
+    mapViewBtn.classList.add('active');
+    
+    // Initialize map on first switch
+    if (!mapInitialized && mapViewer) {
+        try {
+            mapViewer.initMap('map');
+            mapInitialized = true;
+        } catch (err) {
+            console.error('Failed to initialize map:', err);
+            alert('Failed to initialize map. Please check console for errors.');
+            switchToTreeView();
+            return;
+        }
+    }
+    
+    // Refresh map size after showing container
+    if (mapViewer && mapInitialized) {
+        mapViewer.refreshMap();
+        
+        // If we have tree data, display it on the map
+        if (currentTreeData) {
+            mapViewer.showEventsOnMap(currentTreeData);
+        }
+    }
+}
+
+// Wire up view switcher buttons
+if (treeViewBtn) {
+    treeViewBtn.addEventListener('click', switchToTreeView);
+}
+if (mapViewBtn) {
+    mapViewBtn.addEventListener('click', switchToMapView);
+}
+
 // Load the public tree viewer script and wire up the search UI to new API endpoints
 const script = document.createElement('script');
 script.src = '/tree_viewer.js';
@@ -543,6 +614,14 @@ script.onload = () => {
             // Backwards compatible: if the server returns { tree, meta } unwrap it
             const root = (data && data.tree) ? data.tree : data;
             window.setTreeRoot(root);
+            
+            // Store tree data for map view
+            currentTreeData = root;
+            
+            // If currently in map view, update the map
+            if (currentView === 'map' && mapViewer && mapInitialized) {
+                mapViewer.showEventsOnMap(currentTreeData);
+            }
 
             // Expose metadata for debugging / display (collapsed by default)
             if (data && data.meta) {

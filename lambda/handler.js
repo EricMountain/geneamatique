@@ -380,12 +380,18 @@ exports.handler = async function (event) {
                 name_comment: row.name_comment,
                 date_of_birth: row.date_of_birth,
                 birth_location: row.birth_location,
+                birth_lat: row.birth_lat,
+                birth_lon: row.birth_lon,
                 birth_comment: row.birth_comment,
                 date_of_death: row.date_of_death,
                 death_location: row.death_location,
+                death_lat: row.death_lat,
+                death_lon: row.death_lon,
                 death_comment: row.death_comment,
                 marriage_date: row.marriage_date,
                 marriage_location: row.marriage_location,
+                marriage_lat: row.marriage_lat,
+                marriage_lon: row.marriage_lon,
                 marriage_comment: row.marriage_comment,
                 family_tree: null,
                 sosa: null,
@@ -420,11 +426,11 @@ exports.handler = async function (event) {
                 });
             });
 
-            const baseSelect = `SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment, r.relationship_type as relationship_type, r.family_tree as family_tree FROM relationships r JOIN individuals i ON r.parent_id = i.id`;
+            const baseSelect = `SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_lat, i.birth_lon, i.birth_comment, i.date_of_death, i.death_location, i.death_lat, i.death_lon, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_lat, i.marriage_lon, i.marriage_comment, r.relationship_type as relationship_type, r.family_tree as family_tree FROM relationships r JOIN individuals i ON r.parent_id = i.id`;
 
             const stmts = {
                 getParents: db.prepare(`${baseSelect} WHERE r.child_id = ? GROUP BY i.id, r.relationship_type ORDER BY r.relationship_type DESC`),
-                getIndividualById: db.prepare(`SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_comment, i.date_of_death, i.death_location, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_comment FROM individuals i WHERE i.id = ?`),
+                getIndividualById: db.prepare(`SELECT i.id as id, i.canonical_name as canonical_name, i.name_comment as name_comment, i.date_of_birth, i.birth_location, i.birth_lat, i.birth_lon, i.birth_comment, i.date_of_death, i.death_location, i.death_lat, i.death_lon, i.death_comment, i.marriage_date, i.marriage_location, i.marriage_lat, i.marriage_lon, i.marriage_comment FROM individuals i WHERE i.id = ?`),
             };
 
             // Map prepared stmts -> name and initialize counters and timing
@@ -453,12 +459,18 @@ exports.handler = async function (event) {
                         name_comment,
                         date_of_birth,
                         birth_location,
+                        birth_lat,
+                        birth_lon,
                         birth_comment,
                         date_of_death,
                         death_location,
+                        death_lat,
+                        death_lon,
                         death_comment,
                         marriage_date,
                         marriage_location,
+                        marriage_lat,
+                        marriage_lon,
                         marriage_comment
                     FROM individuals
                 `);
@@ -491,12 +503,18 @@ exports.handler = async function (event) {
                         i.name_comment,
                         i.date_of_birth,
                         i.birth_location,
+                        i.birth_lat,
+                        i.birth_lon,
                         i.birth_comment,
                         i.date_of_death,
                         i.death_location,
+                        i.death_lat,
+                        i.death_lon,
                         i.death_comment,
                         i.marriage_date,
                         i.marriage_location,
+                        i.marriage_lat,
+                        i.marriage_lon,
                         i.marriage_comment
                     FROM relationships r
                     JOIN individuals i ON r.parent_id = i.id
