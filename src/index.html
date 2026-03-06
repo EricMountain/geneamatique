@@ -291,23 +291,7 @@
             display: none;
         }
 
-        /* Chart metadata badge (light/dark via variables) */
-        #chart .chart-meta {
-            position: absolute;
-            top: 6px;
-            right: 6px;
-            font-size: 12px;
-            display: none;
-            z-index: 1000;
-            cursor: pointer;
-            transition: all 160ms ease;
-            /* Allow the expanded popup to use most of the viewport without overflowing the page */
-            max-width: 95vw;
-            overflow: hidden;
-            border-radius: 6px;
-            box-shadow: var(--chart-shadow);
-            color: var(--text);
-        }
+        /* Chart metadata badge - now styled inline with view-switcher above */
 
         /* When the page requires authentication, show a full-screen login view */
         body.auth-required {
@@ -365,42 +349,15 @@
             color: var(--text);
         }
 
-        #chart .chart-meta.collapsed {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 28px;
-            height: 28px;
-            padding: 0;
-            border-radius: 14px;
-            white-space: nowrap;
-        }
 
-        #chart .chart-meta.expanded {
-            display: block;
-            padding: 8px 10px;
-            width: auto;
-            height: auto;
-            white-space: normal;
-            /* Allow the inner table's scrollbar to show and keep the popup from clipping */
-            overflow: auto;
-            max-height: 75vh;
-        }
-
-        /* Badge - inherit theme via CSS variables (keeps behaviour consistent) */
-        #chart .chart-meta {
-            background: var(--overlay-bg);
-            border: 1px solid var(--border);
-            color: var(--text);
-            box-shadow: var(--chart-shadow);
-        }
 
         /* View switcher buttons */
         #view-switcher {
-            position: absolute;
-            top: 20px;
+            position: fixed;
+            top: 70px;
             right: 20px;
             display: flex;
+            flex-direction: column;
             gap: 8px;
             z-index: 1000;
         }
@@ -430,6 +387,46 @@
             background: var(--node-stroke);
             border-color: var(--node-stroke);
             color: white;
+        }
+
+        /* Metrics button styled to match view buttons */
+        #chart-meta {
+            width: 44px;
+            height: 44px;
+            background: var(--page-bg);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 0.2s ease;
+            box-shadow: var(--chart-shadow);
+        }
+
+        #chart-meta:hover {
+            border-color: var(--node-stroke);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        #chart-meta.expanded {
+            width: auto;
+            height: auto;
+            border-radius: 6px;
+            font-size: 12px;
+            display: block;
+            padding: 8px 10px;
+            max-width: 95vw;
+            max-height: 75vh;
+            overflow: auto;
+        }
+
+        #chart-meta.collapsed {
+            width: 44px;
+            height: 44px;
+            padding: 0;
         }
 
         /* Map container */
@@ -520,15 +517,15 @@
         </div>
     </div>
 
+    <div id="view-switcher">
+        <button class="view-btn" id="tree-view-btn" title="Tree View" aria-label="Switch to tree view" style="display:none;">🌳</button>
+        <button class="view-btn active" id="map-view-btn" title="Map View" aria-label="Switch to map view">🗺️</button>
+    </div>
+
     <div id="chart"></div>
 
     <div id="map-container">
         <div id="map"></div>
-    </div>
-
-    <div id="view-switcher">
-        <button class="view-btn active" id="tree-view-btn" title="Tree View" aria-label="Switch to tree view">🌳</button>
-        <button class="view-btn" id="map-view-btn" title="Map View" aria-label="Switch to map view">🗺️</button>
     </div>
 
     <div id="search-results"></div>

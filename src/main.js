@@ -51,8 +51,9 @@ function switchToTreeView() {
     chartContainer.style.display = 'block';
     mapContainer.style.display = 'none';
     
-    treeViewBtn.classList.add('active');
-    mapViewBtn.classList.remove('active');
+    // Show map button, hide tree button
+    treeViewBtn.style.display = 'none';
+    mapViewBtn.style.display = 'flex';
 }
 
 function switchToMapView() {
@@ -62,8 +63,9 @@ function switchToMapView() {
     chartContainer.style.display = 'none';
     mapContainer.style.display = 'block';
     
-    treeViewBtn.classList.remove('active');
-    mapViewBtn.classList.add('active');
+    // Show tree button, hide map button
+    treeViewBtn.style.display = 'flex';
+    mapViewBtn.style.display = 'none';
     
     // Initialize map on first switch
     if (!mapInitialized && mapViewer) {
@@ -411,16 +413,14 @@ script.onload = () => {
     // Initialize client-side auth
     initAuth();
 
-    // Small metadata display (response times, DB stats) — positioned discreetly at top-right
-    // Ensure the chart can position children absolutely
-    if (chart.style.position !== 'relative' && chart.style.position !== 'absolute') chart.style.position = 'relative';
+    // Small metadata display (response times, DB stats) — add to view-switcher button group
+    const viewSwitcher = document.getElementById('view-switcher');
     let chartMeta = document.getElementById('chart-meta');
     if (!chartMeta) {
         chartMeta = document.createElement('div');
         chartMeta.id = 'chart-meta';
         chartMeta.style.display = 'none';
-        chartMeta.style.zIndex = '1000';
-        chartMeta.classList.add('chart-meta', 'collapsed');
+        chartMeta.classList.add('collapsed');
         chartMeta.dataset.expanded = 'false';
         // Toggle expand/collapse on click
         chartMeta.addEventListener('click', (e) => {
@@ -461,16 +461,11 @@ script.onload = () => {
                 chartMeta.style.display = 'none';
                 return;
             }
-            chartMeta.style.display = 'block';
+            chartMeta.style.display = 'flex';
 
             if (!expanded) {
                 // collapsed: icon-only compact badge
-                chartMeta.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:14px;font-weight:700;">⏱</div>`;
-                // no tooltip; keep collapsed compact
-                chartMeta.style.padding = '0';
-                chartMeta.style.width = '28px';
-                chartMeta.style.height = '28px';
-                chartMeta.style.whiteSpace = 'nowrap';
+                chartMeta.innerHTML = `⏱`;
             } else {
                 // expanded: show full metrics (no helper text)
                 const db = meta.db_time_ms || {};
@@ -517,21 +512,14 @@ script.onload = () => {
                     </div>
                     ${stmtHtml}
                 `;
-                chartMeta.style.whiteSpace = 'normal';
-                chartMeta.style.padding = '8px 10px';
-                chartMeta.style.width = '';
-                chartMeta.style.height = '';
             }
         };
 
         // expose renderer so we can call it later when receiving data
         chartMeta.renderChartMeta = renderChartMeta;
 
-        // No JS-based color listeners required — CSS handles scheme and html[data-theme] overrides.
-        // apply initial rendering state
-        // leave collapse/expand classes as set on creation; render will update visibility/content
-
-        chart.appendChild(chartMeta);
+        // Append to view-switcher instead of chart
+        viewSwitcher.appendChild(chartMeta);
     }
 
     function setSearchLoading(loading) {
