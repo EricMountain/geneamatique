@@ -13,6 +13,16 @@ try:
 except ImportError:
     from calendar.util import republican_to_gregorian
 
+# Geocoding imports
+try:
+    from .geocode_cache import GeocodeCache
+    from .geocoder import NominatimGeocoder
+    from .geocode_queue import GeocodeQueue
+except ImportError:
+    from geocode_cache import GeocodeCache
+    from geocoder import NominatimGeocoder
+    from geocode_queue import GeocodeQueue
+
 # Global accumulator for date inconsistency warnings
 _date_warnings = []
 
@@ -36,13 +46,19 @@ def create_database(db_name='data/genealogy.db'):
         name_comment TEXT,
         date_of_birth TEXT,
         birth_location TEXT,
+        birth_lat REAL,
+        birth_lon REAL,
         birth_comment TEXT,
         date_of_death TEXT,
         death_location TEXT,
+        death_lat REAL,
+        death_lon REAL,
         death_comment TEXT,
         profession TEXT,
         marriage_date TEXT,
         marriage_location TEXT,
+        marriage_lat REAL,
+        marriage_lon REAL,
         marriage_comment TEXT
     )
     ''')
@@ -974,6 +990,55 @@ def store_data(individuals, db_name='data/genealogy.db'):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
 
+    # Initialize geocoding system
+    print("\n   Initializing geocoding system...")
+    geocode_cache = GeocodeCache()
+    geocoder = NominatimGeocoder()
+    geocode_queue = GeocodeQueue(geocode_cache, geocoder)
+    geocode_queue.start()
+
+    def update_coordinates_callback(location, lat, lon, country):
+        """Callback to update coordinates in database when geocoding completes."""
+        if lat is None or lon is None:
+            return  # Skip failed geocoding
+        
+        # Update all individuals with this location
+        try:
+            temp_conn = sqlite3.connect(db_name)
+            temp_cursor = temp_conn.cursor()
+            
+            # Update birth locations
+            temp_cursor.execute('''
+                UPDATE individuals 
+                SET birth_lat = ?, birth_lon = ?
+                WHERE birth_location = ? AND birth_lat IS NULL
+            ''', (lat, lon, location))
+            
+            # Update death locations
+            temp_cursor.execute('''
+                UPDATE individuals 
+                SET death_lat = ?, death_lon = ?
+                WHERE death_location = ? AND death_lat IS NULL
+            ''', (lat, lon, location))
+            
+            # Update marriage locations
+            temp_cursor.execute('''
+                UPDATE individuals 
+                SET marriage_lat = ?, marriage_lon = ?
+                WHERE marriage_location = ? AND marriage_lat IS NULL
+            ''', (lat, lon, location))
+            
+            temp_conn.commit()
+            temp_conn.close()
+        except Exception as e:
+            print(f"   ⚠ Error updating coordinates for '{location}': {e}")
+
+    # Helper function to enqueue location for geocoding
+    def enqueue_location(location):
+        """Enqueue a location for geocoding if not already cached."""
+        if location and location.strip():
+            geocode_queue.enqueue(location.strip(), update_coordinates_callback)
+
     # Map (family_tree, old_id) -> canonical individual_id
     tree_instance_map = {}
 
@@ -1084,6 +1149,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
                     if individual['birth_location'] and not existing_data[2]:
                         updates.append('birth_location = ?')
                         params.append(individual['birth_location'])
+                        enqueue_location(individual['birth_location'])
                     if individual['birth_comment'] and not existing_data[3]:
                         updates.append('birth_comment = ?')
                         params.append(individual['birth_comment'])
@@ -1093,6 +1159,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
                     if individual['death_location'] and not existing_data[5]:
                         updates.append('death_location = ?')
                         params.append(individual['death_location'])
+                        enqueue_location(individual['death_location'])
                     if individual['death_comment'] and not existing_data[6]:
                         updates.append('death_comment = ?')
                         params.append(individual['death_comment'])
@@ -1105,6 +1172,7 @@ def store_data(individuals, db_name='data/genealogy.db'):
                     if individual['marriage_location'] and not existing_data[9]:
                         updates.append('marriage_location = ?')
                         params.append(individual['marriage_location'])
+                        enqueue_location(individual['marriage_location'])
                     if individual['marriage_comment'] and not existing_data[10]:
                         updates.append('marriage_comment = ?')
                         params.append(individual['marriage_comment'])
@@ -1144,6 +1212,11 @@ def store_data(individuals, db_name='data/genealogy.db'):
                         individual.get('marriage_comment')
                     ))
                     individual_id = cursor.lastrowid
+                    
+                    # Enqueue locations for geocoding
+                    enqueue_location(individual.get('birth_location'))
+                    enqueue_location(individual.get('death_location'))
+                    enqueue_location(individual.get('marriage_location'))
                 else:
                     # Found matching individual - merge data and track it
                     merged_individuals.append({
@@ -1192,6 +1265,21 @@ def store_data(individuals, db_name='data/genealogy.db'):
             traceback.print_exc()
 
     conn.commit()
+
+    # Flush geocoding queue and wait for completion
+    print("\n   Flushing geocoding queue...")
+    geocode_queue.flush(show_progress=True)
+    geocode_queue.stop(timeout=5.0)
+    
+    # Print geocoding statistics
+    geocode_stats = geocode_queue.get_stats()
+    cache_stats = geocode_cache.get_stats()
+    print(f"\n   Geocoding Statistics:")
+    print(f"     Cache hits: {geocode_stats['cache_hits']}")
+    print(f"     API calls: {geocode_stats['api_calls']}")
+    print(f"     Successful: {geocode_stats['successes']}")
+    print(f"     Failed: {geocode_stats['failures']}")
+    print(f"     Total cache entries: {cache_stats['total_entries']}")
 
     # Infer and store relationships
     relationships = infer_relationships(individuals_dict, tree_instance_map)
