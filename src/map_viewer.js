@@ -92,12 +92,96 @@ function flattenTree(tree) {
 }
 
 /**
+ * Infer likely female from genealogy parity convention
+ * (odd IDs/SOSA are typically female, even are typically male).
+ * @param {object} individual
+ * @returns {boolean}
+ */
+function isLikelyFemale(individual) {
+    const paritySource = (typeof individual?.sosa === 'number')
+        ? individual.sosa
+        : ((typeof individual?.db_id === 'number') ? individual.db_id : null);
+    return paritySource != null && (paritySource % 2 === 1);
+}
+
+/**
+ * Sort union participants with women first, then by name for stability.
+ * @param {array} individuals
+ * @returns {array}
+ */
+function sortUnionParticipants(individuals) {
+    return [...individuals].sort((a, b) => {
+        const aFemale = isLikelyFemale(a);
+        const bFemale = isLikelyFemale(b);
+        if (aFemale !== bFemale) return aFemale ? -1 : 1;
+
+        const aName = (a?.name || '').toLowerCase();
+        const bName = (b?.name || '').toLowerCase();
+        return aName.localeCompare(bName);
+    });
+}
+
+/**
  * Extract events with valid coordinates from individuals
  * @param {array} individuals - Array of individual objects
  * @returns {array} - Array of event objects with {type, lat, lon, individual, location, date}
  */
-function extractEvents(individuals) {
+function extractEvents(individuals, tree = null) {
     const events = [];
+    const marriageGroups = new Map();
+    const pairedParticipantIds = new Set();
+
+    // Prefer deriving union events from co-parents in the tree so both individuals appear together.
+    if (tree) {
+        const queue = [tree];
+        const seen = new Set();
+
+        while (queue.length > 0) {
+            const node = queue.shift();
+            if (!node || seen.has(node.db_id)) continue;
+            seen.add(node.db_id);
+
+            if (Array.isArray(node.children) && node.children.length > 0) {
+                for (const child of node.children) queue.push(child);
+
+                const sortedParents = sortUnionParticipants(node.children);
+                const woman = sortedParents.find(isLikelyFemale) || sortedParents[0] || null;
+                const man = sortedParents.find((p) => !isLikelyFemale(p)) || sortedParents[1] || null;
+
+                if (woman && man) {
+                    const hasMarriageData =
+                        (woman.marriage_lat != null && woman.marriage_lon != null) ||
+                        (man.marriage_lat != null && man.marriage_lon != null);
+
+                    if (hasMarriageData) {
+                        const primary = (woman.marriage_lat != null && woman.marriage_lon != null) ? woman : man;
+                        const secondary = primary === woman ? man : woman;
+
+                        const unionKey = [
+                            Math.min(woman.db_id, man.db_id),
+                            Math.max(woman.db_id, man.db_id),
+                            primary.marriage_date || secondary.marriage_date || '',
+                            primary.marriage_location || secondary.marriage_location || ''
+                        ].join('|');
+
+                        if (!marriageGroups.has(unionKey)) {
+                            marriageGroups.set(unionKey, {
+                                type: 'marriage',
+                                lat: primary.marriage_lat,
+                                lon: primary.marriage_lon,
+                                location: primary.marriage_location || secondary.marriage_location || null,
+                                date: primary.marriage_date || secondary.marriage_date || null,
+                                participants: sortUnionParticipants([woman, man])
+                            });
+                        }
+
+                        pairedParticipantIds.add(woman.db_id);
+                        pairedParticipantIds.add(man.db_id);
+                    }
+                }
+            }
+        }
+    }
 
     for (const individual of individuals) {
         // Birth event
@@ -126,15 +210,37 @@ function extractEvents(individuals) {
 
         // Marriage event
         if (individual.marriage_lat != null && individual.marriage_lon != null) {
-            events.push({
-                type: 'marriage',
-                lat: individual.marriage_lat,
-                lon: individual.marriage_lon,
-                individual: individual,
-                location: individual.marriage_location,
-                date: individual.marriage_date
-            });
+            // If this individual already participates in a paired union event, skip single-person duplicate.
+            if (pairedParticipantIds.has(individual.db_id)) {
+                continue;
+            }
+
+            const marriageKey = [
+                Math.round(individual.marriage_lat * 10000) / 10000,
+                Math.round(individual.marriage_lon * 10000) / 10000,
+                individual.marriage_date || '',
+                individual.marriage_location || ''
+            ].join('|');
+
+            if (!marriageGroups.has(marriageKey)) {
+                marriageGroups.set(marriageKey, {
+                    type: 'marriage',
+                    lat: individual.marriage_lat,
+                    lon: individual.marriage_lon,
+                    location: individual.marriage_location,
+                    date: individual.marriage_date,
+                    participants: []
+                });
+            }
+
+            marriageGroups.get(marriageKey).participants.push(individual);
         }
+    }
+
+    for (const group of marriageGroups.values()) {
+        group.participants = sortUnionParticipants(group.participants);
+        group.individual = group.participants[0] || null;
+        events.push(group);
     }
 
     return events;
@@ -181,6 +287,31 @@ function createPopupContent(event) {
     const ind = event.individual;
     const typeEmoji = { birth: '🍼', death: '🪦', marriage: '💍' };
     const typeLabel = { birth: 'Born', death: 'Died', marriage: 'Married' };
+
+    if (event.type === 'marriage') {
+        const participants = Array.isArray(event.participants) ? event.participants : (ind ? [ind] : []);
+        const participantHtml = participants.length > 0
+            ? participants.map((p) => {
+                const comment = p.name_comment
+                    ? `<div style="font-style:italic;font-size:12px;color:var(--muted);">(${p.name_comment})</div>`
+                    : '';
+                return `<div style="margin-top:6px;"><strong>${p.name || 'Unknown'}</strong>${comment}</div>`;
+            }).join('')
+            : '<div style="margin-top:6px;color:var(--muted);">Unknown individuals</div>';
+
+        let content = `<div><strong>${typeEmoji[event.type]} Union</strong></div>`;
+        content += participantHtml;
+
+        if (event.date) {
+            content += `<div style="margin-top:8px;">📅 ${event.date}</div>`;
+        }
+
+        if (event.location) {
+            content += `<div>📍 ${event.location}</div>`;
+        }
+
+        return content;
+    }
 
     let content = `<strong>${ind.name || 'Unknown'}</strong>`;
 
@@ -281,7 +412,7 @@ export function showEventsOnMap(treeData) {
 
     // Flatten tree and extract events
     const individuals = flattenTree(treeData);
-    const events = extractEvents(individuals);
+    const events = extractEvents(individuals, treeData);
 
     if (events.length === 0) {
         console.warn('No events with valid coordinates found in tree data');
@@ -304,10 +435,14 @@ export function showEventsOnMap(treeData) {
 
     // Add markers for each event
     for (const event of events) {
+        const markerTitle = event.type === 'marriage'
+            ? `${(event.participants || []).map(p => p.name).filter(Boolean).join(' + ')} - ${event.type}`
+            : `${event.individual.name} - ${event.type}`;
+
         const marker = L.marker([event.lat, event.lon], {
             icon: createEventIcon(event.type),
             eventType: event.type, // Store for cluster counting
-            title: `${event.individual.name} - ${event.type}`
+            title: markerTitle
         });
 
         marker.bindPopup(createPopupContent(event), {
