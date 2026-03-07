@@ -58,7 +58,7 @@ function createEventIcon(type) {
  */
 function flattenTree(tree) {
     if (!tree) return [];
-    
+
     const individuals = [tree];
     const queue = [tree];
     const seen = new Set([tree.db_id]);
@@ -171,17 +171,17 @@ function createPopupContent(event) {
     const typeLabel = { birth: 'Born', death: 'Died', marriage: 'Married' };
 
     let content = `<strong>${ind.name || 'Unknown'}</strong>`;
-    
+
     if (ind.name_comment) {
         content += `<div style="font-style:italic;font-size:12px;color:var(--muted);">${ind.name_comment}</div>`;
     }
 
     content += `<div style="margin-top:8px;"><strong>${typeEmoji[event.type]} ${typeLabel[event.type]}</strong></div>`;
-    
+
     if (event.date) {
         content += `<div>📅 ${event.date}</div>`;
     }
-    
+
     if (event.location) {
         content += `<div>📍 ${event.location}</div>`;
     }
@@ -204,7 +204,7 @@ function createPopupContent(event) {
  */
 function createClusterIcon(cluster) {
     const markers = cluster.getAllChildMarkers();
-    
+
     // Count events by type
     const counts = { birth: 0, death: 0, marriage: 0 };
     for (const marker of markers) {
@@ -215,13 +215,13 @@ function createClusterIcon(cluster) {
     }
 
     const total = markers.length;
-    
+
     // Build breakdown text
     const parts = [];
     if (counts.birth > 0) parts.push(`${counts.birth} birth${counts.birth > 1 ? 's' : ''}`);
     if (counts.death > 0) parts.push(`${counts.death} death${counts.death > 1 ? 's' : ''}`);
     if (counts.marriage > 0) parts.push(`${counts.marriage} marriage${counts.marriage > 1 ? 's' : ''}`);
-    
+
     const title = parts.join(', ') || `${total} events`;
 
     // Determine dominant color based on event mix
