@@ -46,11 +46,11 @@ import('./map_viewer.js').then(module => {
 
 function switchToTreeView() {
     if (currentView === 'tree') return;
-    
+
     currentView = 'tree';
     chartContainer.style.display = 'block';
     mapContainer.style.display = 'none';
-    
+
     // Show map button, hide tree button
     treeViewBtn.style.display = 'none';
     mapViewBtn.style.display = 'flex';
@@ -58,15 +58,15 @@ function switchToTreeView() {
 
 function switchToMapView() {
     if (currentView === 'map') return;
-    
+
     currentView = 'map';
     chartContainer.style.display = 'none';
     mapContainer.style.display = 'block';
-    
+
     // Show tree button, hide map button
     treeViewBtn.style.display = 'flex';
     mapViewBtn.style.display = 'none';
-    
+
     // Initialize map on first switch
     if (!mapInitialized && mapViewer) {
         try {
@@ -79,11 +79,11 @@ function switchToMapView() {
             return;
         }
     }
-    
+
     // Refresh map size after showing container
     if (mapViewer && mapInitialized) {
         mapViewer.refreshMap();
-        
+
         // If we have tree data, display it on the map
         if (currentTreeData) {
             mapViewer.showEventsOnMap(currentTreeData);
@@ -602,10 +602,10 @@ script.onload = () => {
             // Backwards compatible: if the server returns { tree, meta } unwrap it
             const root = (data && data.tree) ? data.tree : data;
             window.setTreeRoot(root);
-            
+
             // Store tree data for map view
             currentTreeData = root;
-            
+
             // If currently in map view, update the map
             if (currentView === 'map' && mapViewer && mapInitialized) {
                 mapViewer.showEventsOnMap(currentTreeData);
