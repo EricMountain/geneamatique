@@ -122,7 +122,7 @@ fi
 
 # Start backend in background
 echo "Starting backend (lambda dev server)..."
-( cd lambda && npm run dev ) &
+( cd lambda && npm run dev --trace-deprecation) &
 BACK_PID=$!
 
 # Give backend a moment to start

@@ -38,3 +38,7 @@ terraform/aws/*.tfstate
 terraform/aws/*.tfstate.backup
 terraform/aws/.terraform.lock.hcl
 .terraform/
+
+# Dev env
+/.vscode/
+

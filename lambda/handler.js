@@ -6,18 +6,39 @@ try {
     console.warn('google-auth-library not available; Google OAuth verification will be disabled in local runs');
 }
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const mime = require('mime-types');
+let sqlite3LoadError = null;
 const sqlite3 = (() => {
     try {
         return require('sqlite3').verbose();
     } catch (err) {
+        sqlite3LoadError = err;
         console.warn('sqlite3 not available; api endpoints will return errors until sqlite3 is installed');
+        if (err && err.message) {
+            console.warn('sqlite3 load error:', err.message);
+        }
         return null;
     }
 })();
 
 const DB_PATH = process.env.GENEALOGY_DB || path.join(__dirname, 'dist', 'data', 'genealogy.db');
+
+function getSqliteDiagnostics() {
+    const binaryPath = path.join(__dirname, 'node_modules', 'sqlite3', 'build', 'Release', 'node_sqlite3.node');
+    const diagnostics = {
+        node: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        db_path: DB_PATH,
+        db_exists: fsSync.existsSync(DB_PATH),
+        sqlite_binary_path: binaryPath,
+        sqlite_binary_exists: fsSync.existsSync(binaryPath),
+        sqlite_load_error: sqlite3LoadError && sqlite3LoadError.message ? sqlite3LoadError.message : null
+    };
+    return diagnostics;
+}
 
 const TABLE = process.env.API_KEYS_TABLE; // legacy api-key table
 const ALLOWED_USERS_TABLE = process.env.ALLOWED_USERS_TABLE; // DynamoDB table that contains allowed Google user emails (partition key: "email")
@@ -303,15 +324,28 @@ exports.handler = async function (event) {
         }
 
         // helper to open DB (was accidentally removed; required by local dev handler)
-        const dbOpen = () => new sqlite3.Database(DB_PATH, sqlite3.OPEN_READONLY);
+        const dbOpen = () => {
+            if (!sqlite3) {
+                const diagnostics = getSqliteDiagnostics();
+                console.error('sqlite3 unavailable for dbOpen', diagnostics);
+                throw new Error(`sqlite3 module unavailable: ${JSON.stringify(diagnostics)}`);
+            }
+            if (!fsSync.existsSync(DB_PATH)) {
+                const diagnostics = getSqliteDiagnostics();
+                console.error('database file missing for dbOpen', diagnostics);
+                throw new Error(`database file not found at ${DB_PATH}`);
+            }
+            return new sqlite3.Database(DB_PATH, sqlite3.OPEN_READONLY);
+        };
         const dbAll = (db, sql, params) => new Promise((resolve, reject) => db.all(sql, params || [], (err, rows) => err ? reject(err) : resolve(rows)));
         const dbGet = (db, sql, params) => new Promise((resolve, reject) => db.get(sql, params || [], (err, row) => err ? reject(err) : resolve(row)));
 
         // GET /api/individuals?q=...  -- simple search
         if (reqPath.startsWith('/api/individuals')) {
             const q = (event.queryStringParameters && event.queryStringParameters.q) || '';
-            const db = dbOpen();
+            let db;
             try {
+                db = dbOpen();
                 let rows;
                 // Simple distinct individuals list that queries only the individuals table
                 if (!q) {
@@ -336,7 +370,7 @@ exports.handler = async function (event) {
                 db.close();
                 return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify(rows) };
             } catch (err) {
-                db.close();
+                if (db) db.close();
                 console.error('search error', err);
                 return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: err && err.message }) };
             }
@@ -349,7 +383,13 @@ exports.handler = async function (event) {
             if (isNaN(id)) return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'missing or invalid id' }) };
 
             const requestStart = process.hrtime.bigint();
-            const db = dbOpen();
+            let db;
+            try {
+                db = dbOpen();
+            } catch (err) {
+                console.error('tree db open error', err);
+                return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: err && err.message }) };
+            }
 
             // Track DB timings and counts for metadata
             const dbQueryTimes = [];
