@@ -42,3 +42,6 @@ terraform/aws/.terraform.lock.hcl
 # Dev env
 /.vscode/
 
+# MacOS
+.DS_Store
+
