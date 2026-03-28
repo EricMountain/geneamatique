@@ -12,9 +12,10 @@ terraform {
   }
 
   backend "s3" {
-    bucket = "terraform-state-geneamatique-705059528575-eu-north-1-an"
-    key    = "terraform/aws/terraform.tfstate"
-    region = "eu-north-1"
+    bucket  = "terraform-state-geneamatique-705059528575-eu-north-1-an"
+    key     = "terraform/aws/terraform.tfstate"
+    region  = "eu-north-1"
+    profile = "eric"
   }
 }
 
