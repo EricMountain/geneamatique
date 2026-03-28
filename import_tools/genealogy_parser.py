@@ -990,54 +990,16 @@ def store_data(individuals, db_name='data/genealogy.db'):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
 
-    # Initialize geocoding system
-    print("\n   Initializing geocoding system...")
-    geocode_cache = GeocodeCache()
-    geocoder = NominatimGeocoder()
-    geocode_queue = GeocodeQueue(geocode_cache, geocoder)
-    geocode_queue.start()
+    # Collect locations encountered during individual processing; geocoding runs
+    # after the main write transaction commits to avoid SQLite lock contention.
+    # (Cache-hit callbacks in GeocodeQueue fire synchronously on the calling thread,
+    # so running geocoding while conn holds a write lock causes "database is locked".)
+    locations_to_geocode = set()
 
-    def update_coordinates_callback(location, lat, lon, country):
-        """Callback to update coordinates in database when geocoding completes."""
-        if lat is None or lon is None:
-            return  # Skip failed geocoding
-        
-        # Update all individuals with this location
-        try:
-            temp_conn = sqlite3.connect(db_name)
-            temp_cursor = temp_conn.cursor()
-            
-            # Update birth locations
-            temp_cursor.execute('''
-                UPDATE individuals 
-                SET birth_lat = ?, birth_lon = ?
-                WHERE birth_location = ? AND birth_lat IS NULL
-            ''', (lat, lon, location))
-            
-            # Update death locations
-            temp_cursor.execute('''
-                UPDATE individuals 
-                SET death_lat = ?, death_lon = ?
-                WHERE death_location = ? AND death_lat IS NULL
-            ''', (lat, lon, location))
-            
-            # Update marriage locations
-            temp_cursor.execute('''
-                UPDATE individuals 
-                SET marriage_lat = ?, marriage_lon = ?
-                WHERE marriage_location = ? AND marriage_lat IS NULL
-            ''', (lat, lon, location))
-            
-            temp_conn.commit()
-            temp_conn.close()
-        except Exception as e:
-            print(f"   ⚠ Error updating coordinates for '{location}': {e}")
-
-    # Helper function to enqueue location for geocoding
     def enqueue_location(location):
-        """Enqueue a location for geocoding if not already cached."""
+        """Collect a location to be geocoded after the main write transaction."""
         if location and location.strip():
-            geocode_queue.enqueue(location.strip(), update_coordinates_callback)
+            locations_to_geocode.add(location.strip())
 
     # Map (family_tree, old_id) -> canonical individual_id
     tree_instance_map = {}
@@ -1265,12 +1227,25 @@ def store_data(individuals, db_name='data/genealogy.db'):
             traceback.print_exc()
 
     conn.commit()
+    conn.close()  # Release write lock before geocoding writes begin
 
-    # Flush geocoding queue and wait for completion
+    # Run geocoding now that the main write transaction is committed and closed.
+    # We enqueue without callbacks so that the geocode queue only touches its own
+    # cache DB.  After the queue drains we do a single-threaded bulk UPDATE pass
+    # on genealogy.db — no concurrent writers, no lock contention.
+    print("\n   Initializing geocoding system...")
+    geocode_cache = GeocodeCache()
+    geocoder = NominatimGeocoder()
+    geocode_queue = GeocodeQueue(geocode_cache, geocoder)
+    geocode_queue.start()
+
+    for location in locations_to_geocode:
+        geocode_queue.enqueue(location)  # no callback — cache-only
+
     print("\n   Flushing geocoding queue...")
     geocode_queue.flush(show_progress=True)
     geocode_queue.stop(timeout=5.0)
-    
+
     # Print geocoding statistics
     geocode_stats = geocode_queue.get_stats()
     cache_stats = geocode_cache.get_stats()
@@ -1280,6 +1255,29 @@ def store_data(individuals, db_name='data/genealogy.db'):
     print(f"     Successful: {geocode_stats['successes']}")
     print(f"     Failed: {geocode_stats['failures']}")
     print(f"     Total cache entries: {cache_stats['total_entries']}")
+
+    # Reopen connection and bulk-update coordinates from the geocode cache
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+
+    updated_count = 0
+    for location in locations_to_geocode:
+        result = geocode_cache.get(location)
+        if result is None:
+            continue
+        lat, lon, _country = result
+
+        for col_prefix in ('birth', 'death', 'marriage'):
+            cursor.execute(f'''
+                UPDATE individuals
+                SET {col_prefix}_lat = ?, {col_prefix}_lon = ?
+                WHERE {col_prefix}_location = ? AND {col_prefix}_lat IS NULL
+            ''', (lat, lon, location))
+            updated_count += cursor.rowcount
+
+    conn.commit()
+    if updated_count:
+        print(f"   Updated {updated_count} coordinate fields")
 
     # Infer and store relationships
     relationships = infer_relationships(individuals_dict, tree_instance_map)
