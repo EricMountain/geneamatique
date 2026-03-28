@@ -37,10 +37,10 @@ deploy: build_pwa terraform-apply
 	@echo "Deploy complete. Use the Terraform output 'function_url' to access the site. Ensure you have created an API key in DynamoDB."
 
 # Run frontend + backend locally for development (backend auth disabled in local mode)
-dev_local: build_pwa
+dev_local:
 	@echo "Starting local backend (lambda) and frontend (src)..."
 	# For local dev, include devDependencies in the lambda install so tools like nodemon are available
-	@INSTALL_DEV_DEPS=1 ./build_pwa.sh
+	@LAMBDA_INSTALL_TARGET=host INSTALL_DEV_DEPS=1 ./build_pwa.sh
 	@./scripts/dev_local.sh
 
 # Convenience bootstrap

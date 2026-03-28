@@ -115,8 +115,8 @@ data "aws_iam_policy_document" "lambda_dynamodb" {
 # the resource cannot be destroyed accidentally.
 
 data "aws_ssm_parameter" "maybe" {
-  count = var.google_client_secret == "" ? 1 : 0
-  name  = "/${var.lambda_name}/google-client-secret"
+  count           = var.google_client_secret == "" ? 1 : 0
+  name            = "/${var.lambda_name}/google-client-secret"
   with_decryption = true
 }
 
@@ -171,6 +171,7 @@ resource "aws_lambda_function" "genealogy" {
   role             = aws_iam_role.lambda.arn
   handler          = "handler.handler"
   runtime          = "nodejs22.x"
+  architectures    = [var.lambda_architecture]
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
   publish          = true

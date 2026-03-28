@@ -10,6 +10,17 @@ variable "lambda_name" {
   default     = "genealogy"
 }
 
+variable "lambda_architecture" {
+  description = "Lambda CPU architecture (x86_64 or arm64)"
+  type        = string
+  default     = "x86_64"
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be one of: x86_64, arm64."
+  }
+}
+
 variable "dynamodb_table_prefix" {
   description = "Prefix to use for DynamoDB table names. If empty, falls back to lambda_name."
   type        = string
@@ -27,9 +38,9 @@ variable "google_client_secret" {
   # When this variable is an empty string Terraform will *not* destroy an
   # existing SSM parameter; the provider uses a data lookup and a lifecycle
   # rule to keep previously-created parameters and policies in place.
-  type        = string
-  default     = ""
-  sensitive   = true
+  type      = string
+  default   = ""
+  sensitive = true
 }
 
 variable "google_client_id" {

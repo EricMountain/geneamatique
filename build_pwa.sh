@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Packaging defaults are tuned for AWS Lambda.
+# Use LAMBDA_INSTALL_TARGET=host for local development on the current machine.
+LAMBDA_INSTALL_TARGET="${LAMBDA_INSTALL_TARGET:-lambda}"
+LAMBDA_TARGET_OS="${LAMBDA_TARGET_OS:-linux}"
+LAMBDA_TARGET_ARCH="${LAMBDA_TARGET_ARCH:-x64}"
+
 echo "Building PWA into lambda/dist..."
 pushd src >/dev/null
 npm install
@@ -10,10 +16,22 @@ popd >/dev/null
 echo "Installing lambda dependencies..."
 pushd lambda >/dev/null
 # When INSTALL_DEV_DEPS=1 is set we include devDependencies (useful for local development with nodemon).
-if [ "${INSTALL_DEV_DEPS:-0}" = "1" ]; then
-    npm install
+if [ "$LAMBDA_INSTALL_TARGET" = "host" ]; then
+    echo "Installing host-native dependencies for local development..."
+    if [ "${INSTALL_DEV_DEPS:-0}" = "1" ]; then
+        npm ci
+    else
+        npm ci --omit=dev
+    fi
 else
-    npm install --omit=dev
+    echo "Installing Lambda-target dependencies for ${LAMBDA_TARGET_OS}/${LAMBDA_TARGET_ARCH}..."
+    # Ensure stale host-native binaries cannot leak into the package.
+    rm -rf node_modules
+    if [ "${INSTALL_DEV_DEPS:-0}" = "1" ]; then
+        npm_config_platform="$LAMBDA_TARGET_OS" npm_config_arch="$LAMBDA_TARGET_ARCH" npm_config_libc=glibc npm ci
+    else
+        npm_config_platform="$LAMBDA_TARGET_OS" npm_config_arch="$LAMBDA_TARGET_ARCH" npm_config_libc=glibc npm ci --omit=dev
+    fi
 fi
 popd >/dev/null
 
