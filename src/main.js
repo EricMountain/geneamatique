@@ -30,11 +30,13 @@ if ('serviceWorker' in navigator) {
 let currentView = 'tree'; // Default to tree view
 let currentTreeData = null; // Store current tree data for map view
 let mapInitialized = false;
+let mapClustering = true; // Whether to cluster markers on the map
 
 const chartContainer = document.getElementById('chart');
 const mapContainer = document.getElementById('map-container');
 const treeViewBtn = document.getElementById('tree-view-btn');
 const mapViewBtn = document.getElementById('map-view-btn');
+const clusterToggleBtn = document.getElementById('cluster-toggle-btn');
 
 // Import map viewer module dynamically
 let mapViewer = null;
@@ -51,9 +53,10 @@ function switchToTreeView() {
     chartContainer.style.display = 'block';
     mapContainer.style.display = 'none';
 
-    // Show map button, hide tree button
+    // Show map button, hide tree button and cluster toggle
     treeViewBtn.style.display = 'none';
     mapViewBtn.style.display = 'flex';
+    if (clusterToggleBtn) clusterToggleBtn.style.display = 'none';
 }
 
 function switchToMapView() {
@@ -63,9 +66,10 @@ function switchToMapView() {
     chartContainer.style.display = 'none';
     mapContainer.style.display = 'block';
 
-    // Show tree button, hide map button
+    // Show tree button and cluster toggle, hide map button
     treeViewBtn.style.display = 'flex';
     mapViewBtn.style.display = 'none';
+    if (clusterToggleBtn) clusterToggleBtn.style.display = 'flex';
 
     // Initialize map on first switch
     if (!mapInitialized && mapViewer) {
@@ -86,7 +90,7 @@ function switchToMapView() {
 
         // If we have tree data, display it on the map
         if (currentTreeData) {
-            mapViewer.showEventsOnMap(currentTreeData);
+            mapViewer.showEventsOnMap(currentTreeData, { cluster: mapClustering });
         }
     }
 }
@@ -97,6 +101,16 @@ if (treeViewBtn) {
 }
 if (mapViewBtn) {
     mapViewBtn.addEventListener('click', switchToMapView);
+}
+if (clusterToggleBtn) {
+    clusterToggleBtn.addEventListener('click', () => {
+        mapClustering = !mapClustering;
+        clusterToggleBtn.classList.toggle('active', !mapClustering);
+        clusterToggleBtn.title = mapClustering ? 'Disable clustering' : 'Enable clustering';
+        if (currentView === 'map' && mapViewer && mapInitialized && currentTreeData) {
+            mapViewer.showEventsOnMap(currentTreeData, { cluster: mapClustering });
+        }
+    });
 }
 
 // Load the public tree viewer script and wire up the search UI to new API endpoints

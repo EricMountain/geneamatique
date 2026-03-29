@@ -396,10 +396,14 @@ function createClusterIcon(cluster) {
 }
 
 /**
- * Display events on the map with clustering
+ * Display events on the map with optional clustering
  * @param {object} treeData - Tree data from API
+ * @param {object} [options] - Display options
+ * @param {boolean} [options.cluster=true] - Whether to group nearby markers into clusters
  */
-export function showEventsOnMap(treeData) {
+export function showEventsOnMap(treeData, options = {}) {
+    const { cluster = true } = options;
+
     if (!map) {
         console.error('Map not initialized. Call initMap() first.');
         return;
@@ -424,14 +428,16 @@ export function showEventsOnMap(treeData) {
         return;
     }
 
-    // Create marker cluster group with custom icon function
-    markersLayer = L.markerClusterGroup({
-        maxClusterRadius: 60,
-        spiderfyOnMaxZoom: true,
-        showCoverageOnHover: false,
-        zoomToBoundsOnClick: true,
-        iconCreateFunction: createClusterIcon
-    });
+    // Create layer: clustered or plain
+    markersLayer = cluster
+        ? L.markerClusterGroup({
+            maxClusterRadius: 60,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            iconCreateFunction: createClusterIcon
+        })
+        : L.layerGroup();
 
     // Add markers for each event
     for (const event of events) {
