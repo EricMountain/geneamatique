@@ -108,7 +108,7 @@ if (clusterToggleBtn) {
         clusterToggleBtn.classList.toggle('active', !mapClustering);
         clusterToggleBtn.title = mapClustering ? 'Disable clustering' : 'Enable clustering';
         if (currentView === 'map' && mapViewer && mapInitialized && currentTreeData) {
-            mapViewer.showEventsOnMap(currentTreeData, { cluster: mapClustering });
+            mapViewer.showEventsOnMap(currentTreeData, { cluster: mapClustering, preserveView: true });
         }
     });
 }

@@ -399,9 +399,10 @@ function createClusterIcon(cluster) {
  * @param {object} treeData - Tree data from API
  * @param {object} [options] - Display options
  * @param {boolean} [options.cluster=true] - Whether to group nearby markers into clusters
+ * @param {boolean} [options.preserveView=false] - Whether to keep the current map view instead of fitting bounds
  */
 export function showEventsOnMap(treeData, options = {}) {
-    const { cluster = true } = options;
+    const { cluster = true, preserveView = false } = options;
 
     if (!map) {
         console.error('Map not initialized. Call initMap() first.');
@@ -460,16 +461,18 @@ export function showEventsOnMap(treeData, options = {}) {
 
     map.addLayer(markersLayer);
 
-    // Fit map to bounds
-    const bounds = calculateBounds(events);
-    if (bounds) {
-        map.fitBounds([
-            [bounds.minLat, bounds.minLon],
-            [bounds.maxLat, bounds.maxLon]
-        ], {
-            padding: [50, 50],
-            maxZoom: 13 // Don't zoom in too close for single locations
-        });
+    // Fit map to bounds only if not preserving the current view
+    if (!preserveView) {
+        const bounds = calculateBounds(events);
+        if (bounds) {
+            map.fitBounds([
+                [bounds.minLat, bounds.minLon],
+                [bounds.maxLat, bounds.maxLon]
+            ], {
+                padding: [50, 50],
+                maxZoom: 13 // Don't zoom in too close for single locations
+            });
+        }
     }
 
     console.log(`Displayed ${events.length} events from ${individuals.length} individuals on map`);
