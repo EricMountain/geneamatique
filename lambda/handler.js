@@ -435,6 +435,8 @@ exports.handler = async function (event) {
                 marriage_comment: row.marriage_comment,
                 family_tree: null,
                 sosa: null,
+                tree_instances: [],
+                sources: [],
                 children: []
             });
 
@@ -576,6 +578,56 @@ exports.handler = async function (event) {
                 console.error('failed to prefetch relationships', e);
             }
 
+            // Prefetch all tree instances (family_tree + old_id per individual)
+            stmtTimeSamples['getAllTreeInstances'] = stmtTimeSamples['getAllTreeInstances'] || [];
+            const treeInstancesByIndividual = new Map();
+            try {
+                const qStartTi = process.hrtime.bigint();
+                const tiRows = await dbAll(db, `
+                    SELECT individual_id, family_tree, old_id
+                    FROM individual_tree_instances
+                    ORDER BY individual_id, family_tree
+                `);
+                const qEndTi = process.hrtime.bigint();
+                const msTi = Number(qEndTi - qStartTi) / 1e6;
+                dbQueryTimes.push(msTi);
+                dbQueryCount++;
+                stmtTimeSamples['getAllTreeInstances'].push(msTi);
+                stmtCounts['getAllTreeInstances'] = (stmtCounts['getAllTreeInstances'] || 0) + 1;
+                for (const r of tiRows) {
+                    const arr = treeInstancesByIndividual.get(r.individual_id) || [];
+                    arr.push({ family_tree: r.family_tree, old_id: r.old_id });
+                    treeInstancesByIndividual.set(r.individual_id, arr);
+                }
+            } catch (e) {
+                console.error('failed to prefetch tree instances', e);
+            }
+
+            // Prefetch all source files per individual
+            stmtTimeSamples['getAllSources'] = stmtTimeSamples['getAllSources'] || [];
+            const sourcesByIndividual = new Map();
+            try {
+                const qStartSrc = process.hrtime.bigint();
+                const srcRows = await dbAll(db, `
+                    SELECT individual_id, source_file
+                    FROM individual_sources
+                    ORDER BY individual_id, source_file
+                `);
+                const qEndSrc = process.hrtime.bigint();
+                const msSrc = Number(qEndSrc - qStartSrc) / 1e6;
+                dbQueryTimes.push(msSrc);
+                dbQueryCount++;
+                stmtTimeSamples['getAllSources'].push(msSrc);
+                stmtCounts['getAllSources'] = (stmtCounts['getAllSources'] || 0) + 1;
+                for (const r of srcRows) {
+                    const arr = sourcesByIndividual.get(r.individual_id) || [];
+                    arr.push(r.source_file);
+                    sourcesByIndividual.set(r.individual_id, arr);
+                }
+            } catch (e) {
+                console.error('failed to prefetch sources', e);
+            }
+
             const getParents = async (individual_id) => {
                 if (parentsCache.has(individual_id)) {
                     parentsCacheHits++;
@@ -626,6 +678,8 @@ exports.handler = async function (event) {
 
                 const node = recordToNode(row);
                 node.sosa = sosa;
+                node.tree_instances = treeInstancesByIndividual.get(individual_id) || [];
+                node.sources = sourcesByIndividual.get(individual_id) || [];
 
                 // get parents (no family_tree filtering — we trace ancestry
                 // through all relationships regardless of import source)

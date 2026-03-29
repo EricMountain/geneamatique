@@ -119,7 +119,10 @@ function formatDetails(d) {
     const lines = [];
 
     // Name comment (shown near the name in the CLI tool; show on hover here)
-    if (d.name_comment) lines.push(`(${d.name_comment})`);
+    if (d.name_comment) {
+        lines.push({ text: `(${d.name_comment})`, indent: false });
+        lines.push({ text: "", indent: false }); // blank line between name comment and life events
+    }
 
     // Birth: show marker + date/location/comment on one line; show marker even if date missing
     if (d.date_of_birth || d.birth_location || d.birth_comment) {
@@ -128,7 +131,7 @@ function formatDetails(d) {
         if (d.birth_location) parts.push(`à ${d.birth_location}`);
         let s = `${BIRTH_SYMBOL} ${parts.join(' ')}`;
         if (d.birth_comment) s += ` (${d.birth_comment})`;
-        lines.push(s);
+        lines.push({ text: s, indent: false });
     }
 
     // Death: show marker + date/location/comment on one line; show marker even if date missing
@@ -138,7 +141,7 @@ function formatDetails(d) {
         if (d.death_location) parts.push(`à ${d.death_location}`);
         let s = `${DEATH_SYMBOL} ${parts.join(' ')}`;
         if (d.death_comment) s += ` (${d.death_comment})`;
-        lines.push(s);
+        lines.push({ text: s, indent: false });
     }
 
     // Marriage: show marker + date/location/comment on one line; show marker even if date missing
@@ -148,13 +151,42 @@ function formatDetails(d) {
         if (d.marriage_location) parts.push(`à ${d.marriage_location}`);
         let s = `${MARRIAGE_SYMBOL} ${parts.join(' ')}`;
         if (d.marriage_comment) s += ` (${d.marriage_comment})`;
-        lines.push(s);
+        lines.push({ text: s, indent: false });
     }
+
+    lines.push({ text: "", indent: false }); // blank line between life events and metadata
 
     // Database id and SOSA number for reference
     if (d.db_id !== undefined && d.db_id !== null) {
         const sosaPart = (d.sosa !== undefined && d.sosa !== null) ? `SOSA: ${d.sosa}` : 'SOSA: ?';
-        lines.push(`${sosaPart}, DBId: ${d.db_id}`);
+        lines.push({ text: `${sosaPart}`, indent: false });
+        lines.push({ text: `DBId: ${d.db_id}`, indent: false });
+    }
+
+    lines.push({ text: "", indent: false });
+
+    // Family tree appearances with old_id, and source files grouped under each tree
+    if (d.tree_instances && d.tree_instances.length) {
+        const remainingSources = new Set(d.sources || []);
+        for (const ti of d.tree_instances) {
+            lines.push({ text: `🌳 ${ti.family_tree} (SOSA: ${ti.old_id})`, indent: false });
+            // Show sources whose path starts with this tree name, indented
+            for (const s of remainingSources) {
+                if (s.startsWith(ti.family_tree + '/')) {
+                    const relative = s.slice(ti.family_tree.length + 1);
+                    lines.push({ text: `📄 ${relative}`, indent: true });
+                    remainingSources.delete(s);
+                }
+            }
+        }
+        // Any sources not matched to a tree
+        for (const s of remainingSources) {
+            lines.push({ text: `📄 ${s}`, indent: false });
+        }
+    } else if (d.sources && d.sources.length) {
+        for (const s of d.sources) {
+            lines.push({ text: `📄 ${s}`, indent: false });
+        }
     }
 
     return lines;
@@ -188,7 +220,7 @@ function calculateNodeDimensions(d) {
 
     if (isExpanded) {
         details.forEach(detail => {
-            maxWidth = Math.max(maxWidth, estimateTextWidth(detail, 10));
+            maxWidth = Math.max(maxWidth, estimateTextWidth(detail.text, 10) + (detail.indent ? 12 : 0));
         });
     }
 
@@ -418,17 +450,17 @@ async function render() {
 
             detailTexts.enter().append('text')
                 .attr('class', 'details')
-                .attr('text-anchor', 'middle')
+                .attr('text-anchor', 'start')
                 .attr('font-size', '10px')
                 .merge(detailTexts)
-                .attr('x', d.width / 2)
-                .attr('y', (text, i) => {
+                .attr('x', line => line.indent ? 18 : 6)
+                .attr('y', (line, i) => {
                     const nameHeight = 24;
                     const detailLineHeight = 11;
                     const detailsTopPadding = 14;
                     return nameHeight + detailsTopPadding + i * detailLineHeight;
                 })
-                .text(text => text);
+                .text(line => line.text);
         });
 
         // Interaction
