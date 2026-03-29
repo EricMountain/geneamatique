@@ -487,6 +487,15 @@
             color: var(--muted);
             margin: 3px 0;
         }
+
+        /* Remove default Leaflet div-icon border/background on custom event markers */
+        .leaflet-div-icon,
+        .event-marker,
+        .custom-cluster-icon {
+            background: none !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
     </style>
 
     <!-- Leaflet CSS -->

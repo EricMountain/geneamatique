@@ -35,9 +35,9 @@ export function initMap(containerId = 'map') {
  */
 function createEventIcon(type) {
     const iconConfig = {
-        birth: { symbol: '🍼', color: '#4A90E2', bg: 'rgba(74, 144, 226, 0.9)', text: 'Birth' },
-        death: { symbol: '🪦', color: '#666666', bg: 'rgba(102, 102, 102, 0.9)', text: 'Death' },
-        marriage: { symbol: '💍', color: '#E24A90', bg: 'rgba(226, 74, 144, 0.9)', text: 'Marriage' }
+        birth: { symbol: '🍼', color: '#4A90E2', bg: 'rgba(113, 166, 226, 0.9)', text: 'Birth' },
+        death: { symbol: '🪦', color: '#a8a8a8', bg: 'rgba(188, 188, 188, 0.9)', text: 'Death' },
+        marriage: { symbol: '💍', color: '#b74ae2', bg: 'rgba(216, 194, 244, 0.9)', text: 'Marriage' }
     };
 
     const config = iconConfig[type] || iconConfig.birth;
@@ -54,7 +54,6 @@ function createEventIcon(type) {
             justify-content: center;
             font-size: 18px;
             line-height: 1;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
         " title="${config.text}">${config.symbol}</div>`,
         className: `event-marker event-marker-${type}`,
         iconSize: [30, 30],
