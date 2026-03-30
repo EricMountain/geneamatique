@@ -461,6 +461,32 @@ async function render() {
                     return nameHeight + detailsTopPadding + i * detailLineHeight;
                 })
                 .text(line => line.text);
+
+            // Copy-to-clipboard icon (top-right corner of expanded nodes)
+            nodeGroup.selectAll('.copy-btn').remove();
+            if (isExpanded) {
+                const copyG = nodeGroup.append('g')
+                    .attr('class', 'copy-btn')
+                    .attr('transform', `translate(${d.width - 22}, 4)`)
+                    .style('cursor', 'pointer')
+                    .on('click', function (event) {
+                        event.stopPropagation();
+                        const name = d.data.name || '';
+                        const text = name + '\n' + details.map(l => (l.indent ? '  ' : '') + l.text).join('\n');
+                        navigator.clipboard.writeText(text.trim()).then(() => {
+                            // Brief visual feedback: swap to a checkmark
+                            const icon = d3.select(this).select('text');
+                            icon.text('✅');
+                            setTimeout(() => icon.text('📋'), 800);
+                        });
+                    });
+                copyG.append('text')
+                    .attr('font-size', '13px')
+                    .attr('dy', '13px')
+                    .attr('fill', 'var(--node-text, var(--text))')
+                    .attr('opacity', 0.45)
+                    .text('📋');
+            }
         });
 
         // Interaction
