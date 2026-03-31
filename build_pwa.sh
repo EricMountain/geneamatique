@@ -27,11 +27,16 @@ else
     echo "Installing Lambda-target dependencies for ${LAMBDA_TARGET_OS}/${LAMBDA_TARGET_ARCH}..."
     # Ensure stale host-native binaries cannot leak into the package.
     rm -rf node_modules
+    # Install JS deps without running lifecycle scripts, then manually invoke
+    # prebuild-install for sqlite3 with the correct target arch/platform.
+    # This avoids npm "Unknown env config" warnings from npm_config_* env vars.
     if [ "${INSTALL_DEV_DEPS:-0}" = "1" ]; then
-        npm_config_platform="$LAMBDA_TARGET_OS" npm_config_arch="$LAMBDA_TARGET_ARCH" npm_config_libc=glibc npm ci
+        npm ci --ignore-scripts
     else
-        npm_config_platform="$LAMBDA_TARGET_OS" npm_config_arch="$LAMBDA_TARGET_ARCH" npm_config_libc=glibc npm ci --omit=dev
+        npm ci --omit=dev --ignore-scripts
     fi
+    (cd node_modules/sqlite3 && npx prebuild-install -r napi \
+        --arch "$LAMBDA_TARGET_ARCH" --platform "$LAMBDA_TARGET_OS" --libc glibc)
 fi
 popd >/dev/null
 
