@@ -26,19 +26,15 @@ const sqlite3 = (() => {
 const DB_PATH = process.env.GENEALOGY_DB || path.join(__dirname, 'dist', 'data', 'genealogy.db');
 
 function getSqliteDiagnostics() {
-    // sqlite3 v6 uses prebuild-install; binaries land in prebuilds/<platform>-<arch>/
-    const prebuildsPath = path.join(__dirname, 'node_modules', 'sqlite3', 'prebuilds', `${process.platform}-${process.arch}`, 'node.napi.node');
-    // Fallback: node-gyp build path (used when built from source)
-    const buildPath = path.join(__dirname, 'node_modules', 'sqlite3', 'build', 'Release', 'node_sqlite3.node');
-    const prebuildsExist = fsSync.existsSync(prebuildsPath);
+    const binaryPath = path.join(__dirname, 'node_modules', 'sqlite3', 'build', 'Release', 'node_sqlite3.node');
     const diagnostics = {
         node: process.version,
         platform: process.platform,
         arch: process.arch,
         db_path: DB_PATH,
         db_exists: fsSync.existsSync(DB_PATH),
-        sqlite_binary_path: prebuildsExist ? prebuildsPath : buildPath,
-        sqlite_binary_exists: prebuildsExist || fsSync.existsSync(buildPath),
+        sqlite_binary_path: binaryPath,
+        sqlite_binary_exists: fsSync.existsSync(binaryPath),
         sqlite_load_error: sqlite3LoadError && sqlite3LoadError.message ? sqlite3LoadError.message : null
     };
     return diagnostics;

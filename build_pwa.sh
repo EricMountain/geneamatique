@@ -35,8 +35,8 @@ else
     else
         npm ci --omit=dev --ignore-scripts
     fi
-    (cd node_modules/sqlite3 && npx prebuild-install -r napi \
-        --arch "$LAMBDA_TARGET_ARCH" --platform "$LAMBDA_TARGET_OS" --libc glibc)
+    (cd node_modules/sqlite3 && ../../node_modules/.bin/prebuild-install -r napi \
+        --arch "$LAMBDA_TARGET_ARCH" --platform "$LAMBDA_TARGET_OS")
 fi
 popd >/dev/null
 
