@@ -8,7 +8,6 @@
 process.env.LOCAL_DEV = '1';
 
 const express = require('express');
-const url = require('url');
 const handler = require('./handler');
 
 const app = express();
@@ -19,9 +18,9 @@ app.use(express.raw({ type: '*/*', limit: '2mb' }));
 
 // Helper to build a Lambda-style event from Express request
 function buildEvent(req) {
-    const parsed = url.parse(req.originalUrl || req.url, true);
-    const queryParams = Object.keys(parsed.query).length ? parsed.query : null;
-    const rawQueryString = parsed.query && Object.keys(parsed.query).length ? parsed.search && parsed.search.slice(1) || '' : '';
+    const parsed = new URL(req.originalUrl || req.url, `http://${req.headers.host || 'localhost'}`);
+    const queryParams = parsed.searchParams.size ? Object.fromEntries(parsed.searchParams) : null;
+    const rawQueryString = parsed.search ? parsed.search.slice(1) : '';
     const headers = Object.assign({}, req.headers);
 
     let body = null;
