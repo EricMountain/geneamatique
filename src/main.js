@@ -30,7 +30,7 @@ if ('serviceWorker' in navigator) {
 let currentView = 'tree'; // Default to tree view
 let currentTreeData = null; // Store current tree data for map view
 let mapInitialized = false;
-let mapClustering = true; // Whether to cluster markers on the map
+let mapClustering = false; // Whether to cluster markers on the map
 
 const chartContainer = document.getElementById('chart');
 const mapContainer = document.getElementById('map-container');
